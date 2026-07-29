@@ -5,6 +5,8 @@ import time
 
 import requests
 
+import vault
+
 SERVER_URL = "http://127.0.0.1:8000"
 IDENTITY_FILE = os.path.join(os.path.dirname(__file__), "identity.json")
 CHECKIN_INTERVAL_SECONDS = 5
@@ -31,18 +33,19 @@ def register():
     print(f"Registered as device #{identity['device_id']} in rental #{identity['rental_id']}.")
     return identity
 
-def apply_local_status(new_status, current_status):
+def apply_local_status(new_status, current_status, device_id):
     if new_status == current_status:
         return current_status
     print(f"[{time.strftime('%H:%M:%S')}] Status changed: {current_status} -> {new_status}")
-    if new_status == "LOCKED":
-        print("Workspace would lock now. (No real files touched -- crypto arrives in Phase 3)")
-    elif new_status == "ACTIVE":
-        print("Workspace unlocked, back to normal.")
+    if new_status == "ACTIVE":
+        vault.setup_workspace(device_id)
+        print("Workspace ready at C:\\Lantern -- files there are encrypted with this device's own vault key.")
+    elif new_status == "LOCKED":
+        print("Rental locked. This is reversible -- the vault key is untouched.")
     elif new_status == "REVOKED":
         print("This device has been revoked. Workspace access removed.")
     elif new_status == "ERASED":
-        print("Erasure confirmed. Keys would be destroyed now. (Simulated -- real crypto arrives in Phase 3)")
+        vault.destroy_vault_key(device_id, reason="Rental erasure confirmed", dry_run=False)
     return new_status
 
 def checkin(identity, current_status):
@@ -60,12 +63,12 @@ def checkin(identity, current_status):
         return current_status
     response.raise_for_status()
     data = response.json()
-    return apply_local_status(data["device_status"], current_status)
+    return apply_local_status(data["device_status"], current_status, identity["device_id"])
 
 def main():
     identity = load_identity() or register()
-    current_status = "ACTIVE"
-    print(f"Agent running, checking in every {CHECKIN_INTERVAL_SECONDS}s. Press Ctrl+C to stop.")
+    current_status = None
+    print(f"Agent running, checking in every {CHECKIN_INTERVAL_SECONDS} seconds. Press Ctrl+C to stop.")
     while True:
         try:
             current_status = checkin(identity, current_status)

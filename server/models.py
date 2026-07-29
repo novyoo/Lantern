@@ -5,7 +5,6 @@ from sqlalchemy.orm import relationship
 
 from database import Base
 
-
 class Customer(Base):
     __tablename__ = "customers"
 
@@ -15,7 +14,6 @@ class Customer(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     rentals = relationship("Rental", back_populates="customer")
-
 
 class Rental(Base):
     __tablename__ = "rentals"
@@ -33,7 +31,6 @@ class Rental(Base):
     devices = relationship("Device", back_populates="rental")
     audit_events = relationship("AuditEvent", back_populates="rental")
 
-
 class Site(Base):
     __tablename__ = "sites"
 
@@ -44,7 +41,6 @@ class Site(Base):
 
     rental = relationship("Rental", back_populates="sites")
     devices = relationship("Device", back_populates="site")
-
 
 class Device(Base):
     __tablename__ = "devices"
@@ -59,10 +55,10 @@ class Device(Base):
     agent_token = Column(String, nullable=True)
     last_seen_at = Column(DateTime, nullable=True)
     confirmed_status = Column(String, nullable=True)
+    wrapped_key_blob = Column(String, nullable=True)
 
     rental = relationship("Rental", back_populates="devices")
     site = relationship("Site", back_populates="devices")
-
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
