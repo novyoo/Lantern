@@ -1,0 +1,55 @@
+{% macro status_panel(rental, oob=False) %}
+<div id="rental-status"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <p>Status: <mark>{{ rental.status }}</mark></p>
+
+  {% if rental.status == "ACTIVE" %}
+  <p>Time remaining: <strong><span id="countdown" data-end="{{ rental.end_date.isoformat() }}Z">calculating...</span></strong></p>
+  <button hx-post="/rentals/{{ rental.id }}/lock" hx-swap="none" hx-confirm="Lock this rental now? Every device becomes unreadable until it is unlocked or erased.">Lock</button>
+
+  {% elif rental.status == "LOCKED" %}
+  <p>All devices are locked and unreadable. This is reversible.</p>
+  <button hx-post="/rentals/{{ rental.id }}/unlock" hx-swap="none">Unlock</button>
+  <button hx-post="/rentals/{{ rental.id }}/confirm_erasure" hx-swap="none" hx-confirm="Confirm erasure? Every device's key is destroyed permanently. This cannot be undone.">Confirm Erasure</button>
+
+  {% elif rental.status == "ERASED" %}
+  <p>Erased. Keys destroyed on every device. This rental is finished.</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro device_row(rental, device, now, oob=False) %}
+<tr id="device-row-{{ device.id }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <td>{{ device.label }}</td>
+  <td>{{ device.model }}</td>
+  <td>{{ device.site.name if device.site else "-" }}</td>
+  <td><mark>{{ device.status }}</mark></td>
+  <td>
+    {% if device.last_seen_at %}
+      {% set seconds_since_seen = (now - device.last_seen_at).total_seconds() %}
+      {% if seconds_since_seen < 15 %}
+        <span style="color: green;">&#9679; Online</span>
+      {% else %}
+        <span style="color: gray;">&#9675; Offline ({{ (seconds_since_seen / 60) | round(1) }}m ago)</span>
+      {% endif %}
+      {% if device.confirmed_status and device.confirmed_status != device.status %}
+      <br><small>agent still applying &mdash; last confirmed {{ device.confirmed_status }}</small>
+      {% endif %}
+    {% else %}
+    -
+    {% endif %}
+  </td>
+  <td>
+    {% if device.status == "ACTIVE" and rental.status == "ACTIVE" %}
+    <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone.">Revoke</button>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}
+
+{% macro audit_item(event, oob=False) %}
+<li id="audit-{{ event.id }}"{% if oob %} hx-swap-oob="afterbegin:#audit-log"{% endif %}>
+  <strong>{{ (event.created_at | jst).strftime("%H:%M:%S") }} JST</strong>
+  - {{ event.action }} by {{ event.actor }}
+  {% if event.details %}<br><small>{{ event.details }}</small>{% endif %}
+</li>
+{% endmacro %}

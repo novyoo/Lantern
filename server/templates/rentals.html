@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Rentals</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Rental</th>
+      <th>Customer</th>
+      <th>Status</th>
+      <th>Start (JST)</th>
+      <th>End (JST)</th>
+      <th>Devices</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for rental in rentals %}
+    <tr>
+      <td><a href="/rentals/{{ rental.id }}">{{ rental.label }}</a></td>
+      <td>{{ rental.customer.name }}</td>
+      <td><mark>{{ rental.status }}</mark></td>
+      <td>{{ (rental.start_date | jst).strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ (rental.end_date | jst).strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ rental.devices | length }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

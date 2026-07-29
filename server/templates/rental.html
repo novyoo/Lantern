@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_fragments.html" import status_panel, device_row, audit_item %}
+
+{% block content %}
+<div hx-ext="ws" ws-connect="/ws/rentals/{{ rental.id }}">
+  <p><a href="/">&larr; All rentals</a></p>
+  <h2>{{ rental.label }}</h2>
+  <p>{{ rental.customer.name }}</p>
+
+  {{ status_panel(rental) }}
+
+  <h3>Devices</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th>Model</th>
+        <th>Site</th>
+        <th>Status</th>
+        <th>Agent</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for device in devices %}
+      {{ device_row(rental, device, now) }}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Activity</h3>
+  <ul id="audit-log">
+    {% for event in events %}
+    {{ audit_item(event) }}
+    {% endfor %}
+  </ul>
+</div>
+
+<script>
+  function tick() {
+    var el = document.getElementById("countdown");
+    if (!el) return;
+    var end = new Date(el.dataset.end).getTime();
+    var diff = end - Date.now();
+    if (diff <= 0) {
+      el.textContent = "0s -- waiting for auto-lock";
+      return;
+    }
+    var days = Math.floor(diff / 86400000);
+    var hours = Math.floor(diff / 3600000) % 24;
+    var minutes = Math.floor(diff / 60000) % 60;
+    var seconds = Math.floor(diff / 1000) % 60;
+    el.textContent = days + "d " + hours + "h " + minutes + "m " + seconds + "s";
+  }
+  setInterval(tick, 1000);
+  tick();
+</script>
+{% endblock %}
