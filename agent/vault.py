@@ -1,3 +1,6 @@
+import base64
+import datetime
+import json
 import os
 import sys
 from pathlib import Path
@@ -5,11 +8,13 @@ from pathlib import Path
 import keyring
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 VAULT_DIR = Path("C:/Lantern")
 SERVICE_NAME = "Lantern"
 DEMO_FILENAME = "welcome.txt"
+AGENT_VERSION = "1.0"
 
 def generate_key():
     return os.urandom(32)
@@ -78,6 +83,44 @@ def read_workspace_file(device_id, filename=DEMO_FILENAME):
     blob = (VAULT_DIR / f"{filename}.enc").read_bytes()
     return decrypt_file_bytes(vault_key, filename, blob)
 
+def signing_key_username(device_id):
+    return f"device-{device_id}-signing-key"
+
+def get_or_create_signing_key(device_id):
+    stored = keyring.get_password(SERVICE_NAME, signing_key_username(device_id))
+    if stored is not None:
+        return ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(stored))
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    raw = private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    keyring.set_password(SERVICE_NAME, signing_key_username(device_id), raw.hex())
+    return private_key
+
+def signing_public_key_base64(device_id):
+    private_key = get_or_create_signing_key(device_id)
+    raw = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return base64.b64encode(raw).decode()
+
+def build_and_sign_certificate(device_id, rental_id, device_label, reason):
+    private_key = get_or_create_signing_key(device_id)
+    payload = {
+        "device_id": device_id,
+        "rental_id": rental_id,
+        "device_label": device_label,
+        "agent_version": AGENT_VERSION,
+        "erased_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "reason": reason,
+    }
+    payload_json = json.dumps(payload, sort_keys=True)
+    signature = private_key.sign(payload_json.encode())
+    return payload_json, base64.b64encode(signature).decode()
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python vault.py read <device_id>")
@@ -90,7 +133,7 @@ if __name__ == "__main__":
     if command == "read":
         content = read_workspace_file(device_id)
         if content is None:
-            print("Cannot decrypt -- vault key has been destroyed. This device's data is permanently unreadable.")
+            print("Cannot decrypt - vault key has been destroyed. This device's data is permanently unreadable.")
         else:
             print(content.decode())
     elif command == "dry-run-erase":

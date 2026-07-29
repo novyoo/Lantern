@@ -3,6 +3,7 @@ import datetime
 from database import SessionLocal
 import models
 import crypto
+import certificates
 
 db = SessionLocal()
 
@@ -22,9 +23,10 @@ project_inc = models.Customer(name="Project Inc", email="it@project-inc.example.
 db.add_all([cp, logicality, dm_locs, project_inc])
 db.commit()
 
-def add_audit(rental, action, actor, details):
+def add_audit(rental, action, actor, details, device=None):
     event = models.AuditEvent(
         rental_id=rental.id,
+        device_id=device.id if device else None,
         action=action,
         actor=actor,
         details=details,
@@ -139,6 +141,23 @@ for rental, site, status, count in device_plan:
             wrapped_key_blob=crypto.to_base64(wrapped_blob),
         )
         db.add(device)
+        db.flush()
+
+        if status == "ERASED" and i < count - 1:
+            signing_key = certificates.generate_signing_key()
+            payload_json, signature = certificates.sign_certificate(signing_key, {
+                "device_id": device.id,
+                "rental_id": rental.id,
+                "device_label": device.label,
+                "agent_version": "1.0",
+                "erased_at": rental.end_date.isoformat() + "Z",
+                "reason": "Rental erasure confirmed",
+            })
+            device.public_key = certificates.public_key_base64(signing_key)
+            device.certificate_payload = payload_json
+            device.certificate_signature = signature
+            add_audit(rental, "certificate_issued", device.label,
+                      "Signed erasure certificate received and verified.", device=device)
 db.commit()
 
 print(f"Seeded {db.query(models.Customer).count()} customers")

@@ -56,6 +56,9 @@ class Device(Base):
     last_seen_at = Column(DateTime, nullable=True)
     confirmed_status = Column(String, nullable=True)
     wrapped_key_blob = Column(String, nullable=True)
+    public_key = Column(String, nullable=True)
+    certificate_payload = Column(String, nullable=True)
+    certificate_signature = Column(String, nullable=True)
 
     rental = relationship("Rental", back_populates="devices")
     site = relationship("Site", back_populates="devices")

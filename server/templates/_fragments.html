@@ -12,7 +12,10 @@
   <button hx-post="/rentals/{{ rental.id }}/confirm_erasure" hx-swap="none" hx-confirm="Confirm erasure? Every device's key is destroyed permanently. This cannot be undone.">Confirm Erasure</button>
 
   {% elif rental.status == "ERASED" %}
+  {% set issued = rental.devices | selectattr("certificate_payload") | list | length %}
+  {% set total = rental.devices | length %}
   <p>Erased. Keys destroyed on every device. This rental is finished.</p>
+  <p>Certificates issued: <strong>{{ issued }}/{{ total }}</strong>{% if issued < total %} &mdash; {{ total - issued }} device(s) offline, pending.{% endif %}</p>
   {% endif %}
 </div>
 {% endmacro %}
@@ -41,6 +44,12 @@
   <td>
     {% if device.status == "ACTIVE" and rental.status == "ACTIVE" %}
     <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone.">Revoke</button>
+    {% elif device.status == "ERASED" %}
+      {% if device.certificate_payload %}
+      <a href="/devices/{{ device.id }}/certificate">Certificate &#9989;</a>
+      {% else %}
+      <small>Certificate pending (device offline)</small>
+      {% endif %}
     {% endif %}
   </td>
 </tr>

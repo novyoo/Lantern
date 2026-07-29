@@ -8,3 +8,5 @@ requests
 cryptography
 keyring
 pytest
+qrcode
+pillow
