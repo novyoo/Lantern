@@ -43,7 +43,7 @@
     var end = new Date(el.dataset.end).getTime();
     var diff = end - Date.now();
     if (diff <= 0) {
-      el.textContent = "0s -- waiting for auto-lock";
+      el.textContent = "0s - waiting for auto-lock";
       return;
     }
     var days = Math.floor(diff / 86400000);

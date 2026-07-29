@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p><a href="/rentals/{{ device.rental_id }}">&larr; Back to rental</a></p>
+<h2>Erasure certificate &mdash; {{ device.label }}</h2>
+<p>Scan this with any phone camera. No login, no app, no server trust needed, the math on the page itself proves it.</p>
+<img src="/devices/{{ device.id }}/certificate/qr.png" alt="Certificate QR code" width="260" height="260">
+<p><a href="{{ verify_url }}" style="word-break: break-all;">{{ verify_url }}</a></p>
+<p><small>Try changing one character inside the <code>data</code> value of that link and reloading it, the signature stops matching and the page turns red.</small></p>
+{% endblock %}

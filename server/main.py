@@ -1,4 +1,5 @@
 import datetime
+import json
 import secrets
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 import models
+import certificates
 from scheduler import start_scheduler
 
 MAX_BLAST_RADIUS = 10
@@ -129,17 +131,18 @@ def apply_revoke(db, device, actor):
     db.refresh(event)
     return event
 
-def render_broadcast_fragments(rental, event):
+def render_broadcast_fragments(rental, events):
     fragments = templates.env.get_template("_fragments.html").module
     now = datetime.datetime.utcnow()
     pieces = [str(fragments.status_panel(rental, oob=True))]
     for device in rental.devices:
         pieces.append(str(fragments.device_row(rental, device, now, oob=True)))
-    pieces.append(str(fragments.audit_item(event, oob=True)))
+    for event in events:
+        pieces.append(str(fragments.audit_item(event, oob=True)))
     return pieces
 
-async def broadcast_rental_update(rental, event):
-    for piece in render_broadcast_fragments(rental, event):
+async def broadcast_rental_update(rental, events):
+    for piece in render_broadcast_fragments(rental, events):
         await manager.broadcast(rental.id, piece)
 
 async def broadcast_device_row(rental, device):
@@ -156,6 +159,9 @@ class AgentCheckinRequest(BaseModel):
     device_id: int
     agent_token: str
     applied_status: str | None = None
+    public_key: str | None = None
+    certificate_payload: str | None = None
+    certificate_signature: str | None = None
 
 def get_or_create_live_devices_rental(db):
     rental = (
@@ -186,23 +192,47 @@ def get_or_create_live_devices_rental(db):
     db.refresh(rental)
     return rental
 
-def apply_checkin(db, device, applied_status):
+def apply_checkin(db, device, payload):
     device.last_seen_at = datetime.datetime.utcnow()
-    event = None
-    if applied_status and applied_status != device.confirmed_status:
-        device.confirmed_status = applied_status
-        event = models.AuditEvent(
+    events = []
+    if payload.applied_status and payload.applied_status != device.confirmed_status:
+        device.confirmed_status = payload.applied_status
+        events.append(models.AuditEvent(
             rental_id=device.rental_id,
             device_id=device.id,
             action="agent_confirmed",
             actor=device.label,
-            details=f"Agent confirmed status: {applied_status}.",
-        )
+            details=f"Agent confirmed status: {payload.applied_status}.",
+        ))
+    if payload.public_key and not device.public_key:
+        device.public_key = payload.public_key
+    if payload.certificate_payload and payload.certificate_signature and not device.certificate_payload:
+        if certificates.verify_signature(
+            device.public_key, payload.certificate_payload, payload.certificate_signature
+        ):
+            device.certificate_payload = payload.certificate_payload
+            device.certificate_signature = payload.certificate_signature
+            events.append(models.AuditEvent(
+                rental_id=device.rental_id,
+                device_id=device.id,
+                action="certificate_issued",
+                actor=device.label,
+                details="Signed erasure certificate received and verified.",
+            ))
+        else:
+            events.append(models.AuditEvent(
+                rental_id=device.rental_id,
+                device_id=device.id,
+                action="certificate_rejected",
+                actor=device.label,
+                details="Signature did not verify - certificate discarded.",
+            ))
+    for event in events:
         db.add(event)
     db.commit()
-    if event:
+    for event in events:
         db.refresh(event)
-    return event
+    return events
 
 @app.get("/")
 def list_rentals(request: Request, db: Session = Depends(get_db)):
@@ -237,7 +267,7 @@ async def lock_rental(rental_id: int, db: Session = Depends(get_db)):
     if rental.status != "ACTIVE":
         raise HTTPException(status_code=400, detail="Rental must be ACTIVE to lock.")
     event = apply_lock(db, rental, actor="Admin (demo)")
-    await broadcast_rental_update(rental, event)
+    await broadcast_rental_update(rental, [event])
     return Response(status_code=204)
 
 @app.post("/rentals/{rental_id}/unlock")
@@ -248,7 +278,7 @@ async def unlock_rental(rental_id: int, db: Session = Depends(get_db)):
     if rental.status != "LOCKED":
         raise HTTPException(status_code=400, detail="Rental must be LOCKED to unlock.")
     event = apply_unlock(db, rental, actor="Admin (demo)")
-    await broadcast_rental_update(rental, event)
+    await broadcast_rental_update(rental, [event])
     return Response(status_code=204)
 
 @app.post("/rentals/{rental_id}/confirm_erasure")
@@ -261,7 +291,7 @@ async def confirm_erasure(rental_id: int, db: Session = Depends(get_db)):
             status_code=400, detail="Rental must be LOCKED before erasure."
         )
     event = apply_erasure(db, rental, actor="Customer Manager (demo)")
-    await broadcast_rental_update(rental, event)
+    await broadcast_rental_update(rental, [event])
     return Response(status_code=204)
 
 @app.post("/devices/{device_id}/revoke")
@@ -273,7 +303,7 @@ async def revoke_device(device_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Device must be ACTIVE to revoke.")
     rental = device.rental
     event = apply_revoke(db, device, actor="Admin (demo)")
-    await broadcast_rental_update(rental, event)
+    await broadcast_rental_update(rental, [event])
     return Response(status_code=204)
 
 @app.post("/agent/register")
@@ -314,12 +344,68 @@ async def agent_checkin(payload: AgentCheckinRequest, db: Session = Depends(get_
     ):
         raise HTTPException(status_code=401, detail="Unknown device or bad token.")
     rental = device.rental
-    event = apply_checkin(db, device, payload.applied_status)
-    if event:
-        await broadcast_rental_update(rental, event)
+    events = apply_checkin(db, device, payload)
+    if events:
+        await broadcast_rental_update(rental, events)
     else:
         await broadcast_device_row(rental, device)
     return {"device_status": device.status, "rental_status": rental.status}
+
+@app.get("/devices/{device_id}/certificate")
+def device_certificate(device_id: int, request: Request, db: Session = Depends(get_db)):
+    device = db.get(models.Device, device_id)
+    if device is None or not device.certificate_payload:
+        raise HTTPException(status_code=404, detail="No certificate issued for this device yet.")
+    verify_url = certificates.build_verify_url(
+        request, device.id, device.certificate_payload, device.certificate_signature
+    )
+    return templates.TemplateResponse(
+        request, "certificate.html", {"device": device, "verify_url": verify_url}
+    )
+
+@app.get("/devices/{device_id}/certificate/qr.png")
+def device_certificate_qr(device_id: int, request: Request, db: Session = Depends(get_db)):
+    device = db.get(models.Device, device_id)
+    if device is None or not device.certificate_payload:
+        raise HTTPException(status_code=404)
+    verify_url = certificates.build_verify_url(
+        request, device.id, device.certificate_payload, device.certificate_signature
+    )
+    return Response(content=certificates.qr_png_bytes(verify_url), media_type="image/png")
+
+@app.get("/verify")
+def verify_certificate(
+    device_id: int, data: str, sig: str, request: Request, db: Session = Depends(get_db)
+):
+    device = db.get(models.Device, device_id)
+    if device is None or not device.public_key:
+        return templates.TemplateResponse(
+            request,
+            "verify.html",
+            {"valid": False, "error": "Unknown device - no certificate on record.", "payload": None},
+        )
+    try:
+        payload_json = certificates.decode_payload(data)
+    except Exception:
+        return templates.TemplateResponse(
+            request,
+            "verify.html",
+            {"valid": False, "error": "This certificate link is malformed.", "payload": None},
+        )
+    valid = certificates.verify_signature(device.public_key, payload_json, sig)
+    if valid:
+        return templates.TemplateResponse(
+            request, "verify.html", {"valid": True, "error": None, "payload": json.loads(payload_json)}
+        )
+    return templates.TemplateResponse(
+        request,
+        "verify.html",
+        {
+            "valid": False,
+            "error": "Signature does not match - this certificate has been tampered with.",
+            "payload": None,
+        },
+    )
 
 @app.websocket("/ws/rentals/{rental_id}")
 async def rental_ws(websocket: WebSocket, rental_id: int):
