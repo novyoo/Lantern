@@ -5,3 +5,6 @@ alembic
 jinja2
 apscheduler
 requests
+cryptography
+keyring
+pytest

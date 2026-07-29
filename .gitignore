@@ -6,3 +6,4 @@ __pycache__/
 agent/identity.json
 PHASES.md
 LANTERN.md
+.pytest_cache/

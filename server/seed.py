@@ -2,6 +2,7 @@ import datetime
 
 from database import SessionLocal
 import models
+import crypto
 
 db = SessionLocal()
 
@@ -21,7 +22,6 @@ project_inc = models.Customer(name="Project Inc", email="it@project-inc.example.
 db.add_all([cp, logicality, dm_locs, project_inc])
 db.commit()
 
-
 def add_audit(rental, action, actor, details):
     event = models.AuditEvent(
         rental_id=rental.id,
@@ -30,7 +30,6 @@ def add_audit(rental, action, actor, details):
         details=details,
     )
     db.add(event)
-
 
 rental1 = models.Rental(
     customer_id=cp.id,
@@ -115,16 +114,29 @@ device_plan = [
     (rental6, contractor6, "ACTIVE", 2),
 ]
 
+recovery_keys_by_rental = {}
+
+def get_recovery_key(rental):
+    if rental.id not in recovery_keys_by_rental:
+        key = crypto.generate_key()
+        recovery_keys_by_rental[rental.id] = key
+        print(f"Recovery key for '{rental.label}' (customer downloads this once, the server keeps only the wrapped blob): {crypto.to_base64(key)}")
+    return recovery_keys_by_rental[rental.id]
+
 device_count = 0
 for rental, site, status, count in device_plan:
+    recovery_key = get_recovery_key(rental)
     for i in range(count):
         device_count += 1
+        device_key = crypto.generate_key()
+        wrapped_blob = crypto.wrap_device_key(recovery_key, device_key)
         device = models.Device(
             rental_id=rental.id,
             site_id=site.id,
             label=f"{rental.label} - Device {i + 1}",
             model=device_models[device_count % len(device_models)],
             status=status,
+            wrapped_key_blob=crypto.to_base64(wrapped_blob),
         )
         db.add(device)
 db.commit()
