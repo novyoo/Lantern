@@ -4,6 +4,7 @@ import shutil
 import socket
 import sys
 import time
+import traceback
 
 import requests
 
@@ -59,7 +60,7 @@ def apply_local_status(new_status, current_status, identity, joined_as):
     bios_cleared = False
     if new_status == "ACTIVE":
         vault.ensure_shared_folder()
-        print("Shared folder ready at C:\\Lantern - files there are encrypted with this site's workspace key.")
+        print("Shared folder ready at C:\\Lantern - drop a file in and it syncs to everyone else in this site. Files they add appear here the same way. Everything is encrypted behind the scenes with this site's workspace key.")
     elif new_status == "LOCKED":
         if joined_as:
             tunnel.bring_down()
@@ -167,6 +168,20 @@ def collect_key_offers(identity, network_info):
         offers.append({"for_device_id": request["device_id"], "blob": blob})
     return offers
 
+def ingest_dropped_files(identity):
+    scope = identity.get("workspace_scope")
+    if vault.get_workspace_key(scope) is None:
+        return
+    for filename in vault.ingest_dropped_files(scope):
+        print(f"Encrypted and shared: {filename}")
+
+def materialize_synced_files(identity):
+    scope = identity.get("workspace_scope")
+    if vault.get_workspace_key(scope) is None:
+        return
+    for filename in vault.materialize_synced_files(scope):
+        print(f"Decrypted and added to C:\\Lantern: {filename}")
+
 def sync_shared_files(identity):
     if vault.get_workspace_key(identity.get("workspace_scope")) is None:
         return
@@ -183,7 +198,7 @@ def sync_shared_files(identity):
         download = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync/{filename}", params=params, timeout=10)
         if download.status_code == 200:
             vault.save_shared_file_ciphertext(filename, download.content)
-            print(f"Synced new shared file from another device: {filename}")
+            print(f"Received from another device (decrypting next): {filename}")
     for filename in local_files - remote_files:
         blob = vault.read_shared_file_ciphertext(filename)
         if blob:
@@ -194,6 +209,8 @@ def full_uninstall(identity):
     destroy_all_local_keys(identity, reason="Left the rental - uninstalling")
     if vault.VAULT_DIR.exists():
         shutil.rmtree(vault.VAULT_DIR, ignore_errors=True)
+    if vault.STORE_DIR.exists():
+        shutil.rmtree(vault.STORE_DIR, ignore_errors=True)
     if os.path.exists(tunnel.CONFIG_PATH):
         os.remove(tunnel.CONFIG_PATH)
     if os.path.exists(IDENTITY_FILE):
@@ -266,13 +283,18 @@ def main():
             if current_status == "ACTIVE":
                 joined_as = maybe_join_network(identity, network_info, joined_as)
                 maybe_bootstrap_workspace_key(identity, network_info)
+                ingest_dropped_files(identity)
                 sync_shared_files(identity)
+                materialize_synced_files(identity)
             if current_status == "LEFT":
                 full_uninstall(identity)
                 print("Leave complete. This agent will now exit.")
                 return
         except requests.exceptions.RequestException as error:
             print(f"Could not reach server ({error}). Staying in last known state and retrying.")
+        except Exception:
+            print("Unexpected error this cycle - staying up and retrying instead of exiting.")
+            traceback.print_exc()
         time.sleep(CHECKIN_INTERVAL_SECONDS)
 
 if __name__ == "__main__":

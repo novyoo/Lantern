@@ -1,9 +1,11 @@
 import base64
 import datetime
+import hashlib
 import json
 import os
 import socket
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -25,6 +27,8 @@ def _app_dir():
     return Path(__file__).parent
 
 FALLBACK_DIR = _app_dir() / ".secrets_fallback"
+STORE_DIR = _app_dir() / ".lantern_store"
+MANIFEST_FILE = STORE_DIR / "manifest.json"
 
 def _set_secret(service, username, value):
     try:
@@ -223,7 +227,20 @@ def destroy_workspace_key(scope, reason, dry_run=False):
         print(f"[DRY RUN] Would destroy the workspace key for {scope} now, because: {reason}. Nothing was touched.")
         return
     _delete_secret(SERVICE_NAME, workspace_key_username(scope))
+    wipe_shared_folder()
     print(f"Workspace key for {scope} destroyed, because: {reason}. The shared folder is now permanently unreadable on this device.")
+
+def wipe_shared_folder():
+    manifest = _load_manifest()
+    for filename in manifest:
+        plaintext_path = VAULT_DIR / filename
+        if plaintext_path.exists():
+            plaintext_path.unlink()
+    if STORE_DIR.exists():
+        for path in STORE_DIR.glob("*.enc"):
+            path.unlink()
+    if MANIFEST_FILE.exists():
+        MANIFEST_FILE.unlink()
 
 def simulated_autopilot_id():
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"lantern-autopilot-{socket.gethostname()}"))
@@ -234,11 +251,24 @@ def clear_bios_password():
 
 def ensure_shared_folder():
     VAULT_DIR.mkdir(parents=True, exist_ok=True)
+    STORE_DIR.mkdir(parents=True, exist_ok=True)
+
+def _hash(data):
+    return hashlib.sha256(data).hexdigest()
+
+def _load_manifest():
+    if MANIFEST_FILE.exists():
+        return json.loads(MANIFEST_FILE.read_text())
+    return {}
+
+def _save_manifest(manifest):
+    STORE_DIR.mkdir(parents=True, exist_ok=True)
+    MANIFEST_FILE.write_text(json.dumps(manifest))
 
 def list_local_shared_files():
-    if not VAULT_DIR.exists():
+    if not STORE_DIR.exists():
         return []
-    return sorted(p.stem for p in VAULT_DIR.glob("*.enc") if p.stem != DEMO_FILENAME)
+    return sorted(p.stem for p in STORE_DIR.glob("*.enc"))
 
 def put_shared_file(scope, filename, plaintext_bytes):
     key = get_workspace_key(scope)
@@ -246,25 +276,89 @@ def put_shared_file(scope, filename, plaintext_bytes):
         return False
     ensure_shared_folder()
     blob = encrypt_file_bytes(key, filename, plaintext_bytes)
-    (VAULT_DIR / f"{filename}.enc").write_bytes(blob)
+    (STORE_DIR / f"{filename}.enc").write_bytes(blob)
+    manifest = _load_manifest()
+    manifest[filename] = {"hash": _hash(plaintext_bytes), "materialized": True}
+    _save_manifest(manifest)
+    (VAULT_DIR / filename).write_bytes(plaintext_bytes)
     return True
 
 def read_shared_file(scope, filename):
     key = get_workspace_key(scope)
     if key is None:
         return None
-    path = VAULT_DIR / f"{filename}.enc"
+    path = STORE_DIR / f"{filename}.enc"
     if not path.exists():
         return None
     return decrypt_file_bytes(key, filename, path.read_bytes())
 
 def save_shared_file_ciphertext(filename, blob):
     ensure_shared_folder()
-    (VAULT_DIR / f"{filename}.enc").write_bytes(blob)
+    (STORE_DIR / f"{filename}.enc").write_bytes(blob)
 
 def read_shared_file_ciphertext(filename):
-    path = VAULT_DIR / f"{filename}.enc"
+    path = STORE_DIR / f"{filename}.enc"
     return path.read_bytes() if path.exists() else None
+
+def list_dropped_plaintext_files():
+    if not VAULT_DIR.exists():
+        return []
+    dropped = []
+    for path in VAULT_DIR.iterdir():
+        if not path.is_file() or path.suffix == ".enc" or path.name.startswith("."):
+            continue
+        try:
+            if time.time() - path.stat().st_mtime < 2:
+                continue
+        except OSError:
+            continue
+        dropped.append(path)
+    return dropped
+
+def ingest_dropped_files(scope):
+    key = get_workspace_key(scope)
+    if key is None:
+        return []
+    manifest = _load_manifest()
+    ingested = []
+    for path in list_dropped_plaintext_files():
+        try:
+            plaintext = path.read_bytes()
+        except OSError:
+            continue
+        digest = _hash(plaintext)
+        if manifest.get(path.name, {}).get("hash") == digest:
+            continue
+        ensure_shared_folder()
+        blob = encrypt_file_bytes(key, path.name, plaintext)
+        (STORE_DIR / f"{path.name}.enc").write_bytes(blob)
+        manifest[path.name] = {"hash": digest, "materialized": True}
+        ingested.append(path.name)
+    if ingested:
+        _save_manifest(manifest)
+    return ingested
+
+def materialize_synced_files(scope):
+    key = get_workspace_key(scope)
+    if key is None:
+        return []
+    manifest = _load_manifest()
+    materialized = []
+    for enc_path in STORE_DIR.glob("*.enc"):
+        filename = enc_path.stem
+        if manifest.get(filename, {}).get("materialized"):
+            continue
+        try:
+            plaintext = decrypt_file_bytes(key, filename, enc_path.read_bytes())
+        except Exception:
+            continue
+        ensure_shared_folder()
+        (VAULT_DIR / filename).write_bytes(plaintext)
+        manifest[filename] = {"hash": _hash(plaintext), "materialized": True}
+        materialized.append(filename)
+    if materialized:
+        _save_manifest(manifest)
+    return materialized
 
 def current_scope():
     identity_path = _app_dir() / "identity.json"

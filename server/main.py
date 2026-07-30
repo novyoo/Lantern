@@ -22,6 +22,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from database import get_db, SessionLocal, engine_name
 import models
@@ -1027,7 +1028,7 @@ async def agent_checkin(payload: AgentCheckinRequest, db: Session = Depends(get_
     ):
         raise HTTPException(status_code=401, detail="Unknown device or bad token.")
     rental = device.rental
-    events = apply_checkin(db, device, payload)
+    events = await run_in_threadpool(apply_checkin, db, device, payload)
     network_info = build_network_payload(db, device, rental)
     if events:
         await broadcast_rental_update(rental)
