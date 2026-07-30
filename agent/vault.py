@@ -253,6 +253,9 @@ def ensure_shared_folder():
     VAULT_DIR.mkdir(parents=True, exist_ok=True)
     STORE_DIR.mkdir(parents=True, exist_ok=True)
 
+def running_inside_shared_folder():
+    return _app_dir().resolve() == VAULT_DIR.resolve()
+
 def _hash(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -300,12 +303,19 @@ def read_shared_file_ciphertext(filename):
     path = STORE_DIR / f"{filename}.enc"
     return path.read_bytes() if path.exists() else None
 
+RESERVED_FILENAMES = {
+    "lantern-agent.exe", "identity.json", "lantern0.conf",
+    "config.txt", "join lantern.bat", "agent.log",
+}
+
 def list_dropped_plaintext_files():
     if not VAULT_DIR.exists():
         return []
     dropped = []
     for path in VAULT_DIR.iterdir():
         if not path.is_file() or path.suffix == ".enc" or path.name.startswith("."):
+            continue
+        if path.name.lower() in RESERVED_FILENAMES:
             continue
         try:
             if time.time() - path.stat().st_mtime < 2:

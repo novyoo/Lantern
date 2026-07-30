@@ -817,7 +817,7 @@ async def lock_rental(
     rental = rental_for_user(db, rental_id, user)
     if rental.status != "ACTIVE":
         raise HTTPException(status_code=400, detail="Rental must be ACTIVE to lock.")
-    apply_lock(db, rental, actor=actor_name(user), confirmed=confirm == "yes")
+    await run_in_threadpool(apply_lock, db, rental, actor_name(user), confirm == "yes")
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 
@@ -831,7 +831,7 @@ async def unlock_rental(
     rental = rental_for_user(db, rental_id, user)
     if rental.status != "LOCKED":
         raise HTTPException(status_code=400, detail="Rental must be LOCKED to unlock.")
-    apply_unlock(db, rental, actor=actor_name(user), confirmed=confirm == "yes")
+    await run_in_threadpool(apply_unlock, db, rental, actor_name(user), confirm == "yes")
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 
@@ -864,7 +864,7 @@ async def extend_rental(
         raise HTTPException(status_code=400, detail="An erased rental cannot be extended.")
     if days < 1 or days > 3650:
         raise HTTPException(status_code=400, detail="Extend by between 1 and 3650 days.")
-    apply_extend(db, rental, actor=actor_name(user), days=days, confirmed=confirm == "yes")
+    await run_in_threadpool(apply_extend, db, rental, actor_name(user), days, confirm == "yes")
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 
@@ -944,7 +944,7 @@ async def move_device_to_site(
     db.add(event)
     db.commit()
     db.refresh(event)
-    sync_rental_network(rental)
+    await run_in_threadpool(sync_rental_network, rental)
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 
@@ -958,7 +958,7 @@ async def revoke_device(
     if device.status != "ACTIVE":
         raise HTTPException(status_code=400, detail="Device must be ACTIVE to revoke.")
     rental = device.rental
-    apply_revoke(db, device, actor=actor_name(user))
+    await run_in_threadpool(apply_revoke, db, device, actor_name(user))
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 
@@ -1046,7 +1046,7 @@ async def leave_device(
     if device.status in ("ERASED", "LEFT"):
         raise HTTPException(status_code=400, detail="Device has already left or been erased.")
     rental = device.rental
-    apply_leave(db, device, actor=actor_name(user))
+    await run_in_threadpool(apply_leave, db, device, actor_name(user))
     await broadcast_rental_update(rental)
     return Response(status_code=204)
 

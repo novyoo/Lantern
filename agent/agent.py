@@ -5,6 +5,7 @@ import socket
 import sys
 import time
 import traceback
+from urllib.parse import quote
 
 import requests
 
@@ -182,6 +183,9 @@ def materialize_synced_files(identity):
     for filename in vault.materialize_synced_files(scope):
         print(f"Decrypted and added to C:\\Lantern: {filename}")
 
+def is_safe_filename(name):
+    return bool(name) and name not in (".", "..") and "/" not in name and "\\" not in name
+
 def sync_shared_files(identity):
     if vault.get_workspace_key(identity.get("workspace_scope")) is None:
         return
@@ -193,16 +197,25 @@ def sync_shared_files(identity):
         remote_files = {entry["filename"] for entry in response.json()}
     except requests.exceptions.RequestException:
         return
+    unsafe = {f for f in remote_files if not is_safe_filename(f)}
+    if unsafe:
+        print(f"Ignoring {len(unsafe)} file(s) from the server with an unsafe name: {unsafe}")
+        remote_files -= unsafe
     local_files = set(vault.list_local_shared_files())
     for filename in remote_files - local_files:
-        download = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync/{filename}", params=params, timeout=10)
+        download = requests.get(
+            f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}", params=params, timeout=10
+        )
         if download.status_code == 200:
             vault.save_shared_file_ciphertext(filename, download.content)
             print(f"Received from another device (decrypting next): {filename}")
     for filename in local_files - remote_files:
         blob = vault.read_shared_file_ciphertext(filename)
         if blob:
-            requests.post(f"{SERVER_URL}/rentals/{rental_id}/sync/{filename}", params=params, data=blob, timeout=10)
+            requests.post(
+                f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}",
+                params=params, data=blob, timeout=10,
+            )
             print(f"Uploaded shared file for other devices to sync: {filename}")
 
 def full_uninstall(identity):
@@ -233,6 +246,16 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "leave":
         cli_leave()
         return
+
+    if vault.running_inside_shared_folder():
+        print("=" * 70)
+        print("WARNING: this program is running from C:\\Lantern itself.")
+        print("C:\\Lantern is the SHARED FOLDER - it should only ever contain")
+        print("files you want to share, not the agent program.")
+        print("Move lantern-agent.exe (and this whole folder) somewhere else,")
+        print("e.g. your Desktop, then run it from there instead.")
+        print("The program's own files will not be shared, but please move it.")
+        print("=" * 70)
 
     identity = load_identity()
     while identity is None:
