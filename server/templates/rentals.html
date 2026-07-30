@@ -2,6 +2,13 @@
 
 {% block content %}
 <h2>Rentals</h2>
+<p>
+  {% if user.role == "YRL Admin" %}
+  <small>You are a YRL Admin, so this list holds every customer's rentals.</small>
+  {% else %}
+  <small>You are the manager for <strong>{{ user.customer.name }}</strong>. This list holds only your own rentals &mdash; the filter runs on the server, so another customer's rental is a 404 even if you type its address by hand.</small>
+  {% endif %}
+</p>
 
 <table>
   <thead>
@@ -12,6 +19,7 @@
       <th>Start (JST)</th>
       <th>End (JST)</th>
       <th>Devices</th>
+      <th>Report</th>
     </tr>
   </thead>
   <tbody>
@@ -23,8 +31,40 @@
       <td>{{ (rental.start_date | jst).strftime("%Y-%m-%d %H:%M") }}</td>
       <td>{{ (rental.end_date | jst).strftime("%Y-%m-%d %H:%M") }}</td>
       <td>{{ rental.devices | length }}</td>
+      <td><a href="/rentals/{{ rental.id }}/report">Audit</a></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+<article>
+  <h3>What Lantern collects, and what it never collects</h3>
+  <p><small>A rental company can only promise privacy if it is unable to break it. Lantern is built so the server holds nothing it could read even if someone wanted to.</small></p>
+  <div class="grid">
+    <div>
+      <h4>Collected</h4>
+      <ul>
+        <li>Device ID, rental ID, site ID</li>
+        <li>Device model and asset tag</li>
+        <li>Online / offline status and last check-in time</li>
+        <li>Key state: active, locked or erased</li>
+        <li>The signed erasure certificate</li>
+        <li>The device's address inside its own rental network</li>
+        <li>The audit trail of lock, revoke, erase and extend actions</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Never collected &mdash; not even a column for it</h4>
+      <ul>
+        <li>File names and file contents</li>
+        <li>Browsing history</li>
+        <li>Installed application lists</li>
+        <li>Keystrokes and screenshots</li>
+        <li>Location</li>
+        <li>The name of the person using the device</li>
+      </ul>
+    </div>
+  </div>
+  <p><small>The shared workspace folder does reach the server, but only as encrypted blocks. The key that opens them is made on a device and handed device to device. The server has never held it, so "we do not look at customer files" is not a policy here &mdash; it is arithmetic.</small></p>
+</article>
 {% endblock %}

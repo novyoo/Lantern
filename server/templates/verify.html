@@ -1,9 +1,26 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Certificate verification</h2>
+{% set is_report = valid and payload.report_of %}
+<h2>{{ "Audit report verification" if is_report else "Certificate verification" }}</h2>
 
-{% if valid %}
+{% if valid and is_report %}
+<article style="border-left: 6px solid green; padding-left: 1rem;">
+  <h3 style="color: green;">&#9989; Valid - this audit report is genuine</h3>
+  <p>This report was signed by the Lantern server and has not been altered since it was generated.</p>
+  <ul>
+    <li>Rental: {{ payload.rental_label }} (ID {{ payload.rental_id }})</li>
+    <li>Customer: {{ payload.customer }}</li>
+    <li>Rental status: {{ payload.rental_status }}</li>
+    <li>Rental term: {{ payload.start_date }} to {{ payload.end_date }}</li>
+    <li>Devices covered: {{ payload.summary.device_count }}</li>
+    <li>Devices erased: {{ payload.summary.erased }}</li>
+    <li>Erasure certificates issued: {{ payload.summary.certificates }}</li>
+    <li>Audit events recorded: {{ payload.summary.event_count }}</li>
+    <li>Report generated at: {{ payload.generated_at }}</li>
+  </ul>
+</article>
+{% elif valid %}
 <article style="border-left: 6px solid green; padding-left: 1rem;">
   <h3 style="color: green;">&#9989; Valid - key permanently destroyed</h3>
   <p>This certificate was signed by the device itself and has not been altered.</p>
@@ -17,8 +34,15 @@
 </article>
 {% else %}
 <article style="border-left: 6px solid red; padding-left: 1rem;">
+  {% if kind == "report" %}
+  <h3 style="color: red;">&#10060; Invalid - this report cannot be trusted</h3>
+  <p>{{ error }}</p>
+  <p><small>Ask for a freshly generated report straight from the dashboard.</small></p>
+  {% else %}
   <h3 style="color: red;">&#10060; Invalid - device requires inspection</h3>
   <p>{{ error }}</p>
+  <p><small>Nothing here can be trusted. Treat this device as if its data were still readable and have it inspected.</small></p>
+  {% endif %}
 </article>
 {% endif %}
 {% endblock %}

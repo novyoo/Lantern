@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Sign in</h2>
+
+{% if error %}
+<article style="border-left: 6px solid red; padding-left: 1rem;">
+  <strong style="color: red;">{{ error }}</strong>
+</article>
+{% endif %}
+
+<form method="post" action="/login">
+  <label>
+    Email
+    <input type="email" name="email" value="{{ email }}" required autofocus>
+  </label>
+  <label>
+    Password
+    <input type="password" name="password" required>
+  </label>
+  <button type="submit">Sign in</button>
+</form>
+
+<article>
+  <h3>Demo accounts</h3>
+  <p><small>This is a portfolio demo, so the accounts are seeded and printed here on purpose. A real deployment would federate to the customer's own identity provider instead.</small></p>
+  <table>
+    <thead><tr><th>Email</th><th>Role</th><th>Sees</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>admin@yrl.example.com</td>
+        <td>YRL Admin</td>
+        <td>Every customer, plus fleet reuse metrics</td>
+      </tr>
+      <tr>
+        <td>it@cp-manufacturing.example.com</td>
+        <td>Customer Manager</td>
+        <td>CP Manufacturing's two rentals only</td>
+      </tr>
+      <tr>
+        <td>it@project-inc.example.com</td>
+        <td>Customer Manager</td>
+        <td>Project Inc's two rentals only</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Password for all demo accounts: <code>lantern-demo-2026!</code></p>
+</article>
+
+<article>
+  <h3>What this page does not do</h3>
+  <ul>
+    <li>No password or token is ever stored in the browser's localStorage. The only thing kept is one <code>httpOnly</code> cookie holding a random session number, which JavaScript on the page cannot read.</li>
+    <li>Passwords are never sent in the address bar, only in the request body, so they never land in browser history or server logs.</li>
+    <li>Five wrong attempts for the same email from the same address locks that pair out for fifteen minutes.</li>
+  </ul>
+</article>
+{% endblock %}

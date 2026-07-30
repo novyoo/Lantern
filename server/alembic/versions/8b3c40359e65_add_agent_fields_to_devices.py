@@ -11,9 +11,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('devices', sa.Column('agent_token', sa.String(), nullable=True))
+    op.add_column('devices', sa.Column('agent_token', sa.Unicode(255), nullable=True))
     op.add_column('devices', sa.Column('last_seen_at', sa.DateTime(), nullable=True))
-    op.add_column('devices', sa.Column('confirmed_status', sa.String(), nullable=True))
+    op.add_column('devices', sa.Column('confirmed_status', sa.Unicode(50), nullable=True))
 
 
 def downgrade() -> None:

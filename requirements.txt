@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 alembic
+pyodbc
 jinja2
 apscheduler
 requests
@@ -10,3 +11,5 @@ keyring
 pytest
 qrcode
 pillow
+pyinstaller
+weasyprint

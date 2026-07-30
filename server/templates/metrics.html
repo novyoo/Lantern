@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p><a href="/">&larr; All rentals</a></p>
+<h2>Reuse metrics</h2>
+<p>How hard the fleet is working. Every number here is counted from the database, never hardcoded.</p>
+
+<div class="grid">
+  <article>
+    <h3>{{ rentals_per_asset }}</h3>
+    <p>Rentals per physical device</p>
+    <small>{{ placement_count }} placements across {{ asset_count }} distinct machines.</small>
+  </article>
+  <article>
+    <h3>{{ certified_count }} / {{ erased_count }}</h3>
+    <p>Verified erasures</p>
+    <small>{{ certified_percent }}% of erased devices carry a signed certificate. The rest were offline at erasure and stay unrentable until they check in.</small>
+  </article>
+  <article>
+    <h3>{{ average_turnaround }} days</h3>
+    <p>Average turnaround</p>
+    <small>{% if turnaround_count %}From erasure to the next rental's start, across {{ turnaround_count }} returns. Fastest {{ fastest_turnaround }}, slowest {{ slowest_turnaround }}.{% else %}No device has been through a second rental yet.{% endif %}</small>
+  </article>
+</div>
+
+<h3>Devices that have been out more than once</h3>
+{% if reused %}
+<table>
+  <thead>
+    <tr>
+      <th>Asset tag</th>
+      <th>Rentals</th>
+      <th>Customers served</th>
+      <th>Latest rental started (JST)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in reused %}
+    <tr>
+      <td>{{ row.asset_tag }}</td>
+      <td>{{ row.rentals }}</td>
+      <td>{{ row.customers | join(", ") }}</td>
+      <td>{{ (row.latest | jst).strftime("%Y-%m-%d") }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><small>This is the business case in one table: the same laptop earning money for a second customer, with the first customer's data mathematically unrecoverable before it ever left their desk.</small></p>
+{% else %}
+<p>No device has been assigned to a second rental yet.</p>
+{% endif %}
+{% endblock %}
