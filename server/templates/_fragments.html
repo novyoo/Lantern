@@ -1,30 +1,65 @@
 {% macro status_panel(rental, oob=False) %}
+{% set active_count = rental.devices | selectattr("status", "equalto", "ACTIVE") | list | length %}
+{% set locked_count = rental.devices | selectattr("status", "equalto", "LOCKED") | list | length %}
+{% set total = rental.devices | length %}
 <div id="rental-status"{% if oob %} hx-swap-oob="true"{% endif %}>
   <p>Status: <mark>{{ rental.status }}</mark></p>
 
   {% if rental.status == "ACTIVE" %}
   <p>Time remaining: <strong><span id="countdown" data-end="{{ rental.end_date.isoformat() }}Z">calculating...</span></strong></p>
-  <button hx-post="/rentals/{{ rental.id }}/lock" hx-swap="none" hx-confirm="Lock this rental now? Every device becomes unreadable until it is unlocked or erased.">Lock</button>
+  <button hx-post="/rentals/{{ rental.id }}/lock?confirm=yes" hx-swap="none" hx-confirm="Lock this rental now? This affects {{ active_count }} device(s) - every one becomes unreadable until it is unlocked or erased.{% if active_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Lock</button>
+  <button hx-post="/rentals/{{ rental.id }}/extend?days=30&confirm=yes" hx-swap="none" hx-confirm="Extend this rental by 30 days? The end date moves and every device's network key is reissued.">Extend 30 days</button>
 
   {% elif rental.status == "LOCKED" %}
-  <p>All devices are locked and unreadable. This is reversible.</p>
-  <button hx-post="/rentals/{{ rental.id }}/unlock" hx-swap="none">Unlock</button>
-  <button hx-post="/rentals/{{ rental.id }}/confirm_erasure" hx-swap="none" hx-confirm="Confirm erasure? Every device's key is destroyed permanently. This cannot be undone.">Confirm Erasure</button>
+  <p>All {{ locked_count }} locked device(s) are unreadable. This is reversible.</p>
+  <button hx-post="/rentals/{{ rental.id }}/unlock?confirm=yes" hx-swap="none" hx-confirm="Unlock this rental? This affects {{ locked_count }} device(s).{% if locked_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Unlock</button>
+  <button hx-post="/rentals/{{ rental.id }}/extend?days=30&confirm=yes" hx-swap="none" hx-confirm="Extend this rental by 30 days? It unlocks {{ locked_count }} device(s), moves the end date, and reissues every device's network key.{% if locked_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Extend 30 days</button>
+  <button hx-post="/rentals/{{ rental.id }}/confirm_erasure?confirm=yes" hx-swap="none" hx-confirm="Confirm erasure of {{ total }} device(s)? Every key is destroyed permanently. This cannot be undone.{% if total > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Confirm Erasure</button>
 
   {% elif rental.status == "ERASED" %}
   {% set issued = rental.devices | selectattr("certificate_payload") | list | length %}
-  {% set total = rental.devices | length %}
   <p>Erased. Keys destroyed on every device. This rental is finished.</p>
   <p>Certificates issued: <strong>{{ issued }}/{{ total }}</strong>{% if issued < total %} &mdash; {{ total - issued }} device(s) offline, pending.{% endif %}</p>
   {% endif %}
+
+  <p><a href="/rentals/{{ rental.id }}/report" role="button" class="secondary">Audit report</a></p>
+</div>
+{% endmacro %}
+
+{% macro return_checklist_panel(rental, checklist, oob=False) %}
+<div id="return-checklist"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h3>Return checklist</h3>
+  <p><small>YRL's own return guide asks the customer to do the last two of these by hand, and warns that forgetting the Autopilot device ID may develop into a security incident. Lantern does them as part of the rental ending.</small></p>
+  <table>
+    <thead><tr><th>Step</th><th>Completed</th><th>Source</th></tr></thead>
+    <tbody>
+      {% for item in checklist %}
+      <tr>
+        <td>{{ item.step }}</td>
+        <td>{% if item.total and item.done == item.total %}<span style="color: green;">{{ item.done }} / {{ item.total }}</span>{% else %}<span style="color: #a15c00;">{{ item.done }} / {{ item.total }}</span>{% endif %}</td>
+        <td><small>{% if item.simulated %}simulated in this demo{% else %}proven cryptographically{% endif %}</small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endmacro %}
 
 {% macro device_row(rental, device, now, oob=False) %}
 <tr id="device-row-{{ device.id }}"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <td>{{ device.label }}</td>
+  <td>{{ device.label }}<br><small>{{ device.asset_tag or "" }}</small></td>
   <td>{{ device.model }}</td>
-  <td>{{ device.site.name if device.site else "-" }}</td>
+  <td>
+    {% if device.status == "ACTIVE" and rental.status == "ACTIVE" and rental.sites | length > 1 %}
+    <select name="site_id" hx-post="/devices/{{ device.id }}/site" hx-swap="none" hx-trigger="change">
+      {% for site in rental.sites %}
+      <option value="{{ site.id }}"{% if site.id == device.site_id %} selected{% endif %}>{{ site.name }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    {{ device.site.name if device.site else "-" }}
+    {% endif %}
+  </td>
   <td><mark>{{ device.status }}</mark></td>
   <td>
     {% if device.last_seen_at %}
@@ -37,28 +72,44 @@
       {% if device.confirmed_status and device.confirmed_status != device.status %}
       <br><small>agent still applying &mdash; last confirmed {{ device.confirmed_status }}</small>
       {% endif %}
+      {% if device.wg_ip and device.status == "ACTIVE" %}
+      <br><small>Network: {{ device.wg_ip }}{% if device.has_workspace_key %} &mdash; shared folder unlocked{% endif %}</small>
+      {% endif %}
     {% else %}
     -
     {% endif %}
   </td>
   <td>
-    {% if device.status == "ACTIVE" and rental.status == "ACTIVE" %}
-    <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone.">Revoke</button>
+    {% if device.status not in ("ERASED", "LEFT") %}
+      {% if device.status == "ACTIVE" and rental.status == "ACTIVE" %}
+      <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone.">Revoke</button>
+      {% endif %}
+      <button hx-post="/devices/{{ device.id }}/leave" hx-swap="none" hx-confirm="Leave / uninstall {{ device.label }}? This fully removes Lantern from that machine - keys destroyed, shared folder deleted, network disconnected.">Leave / Uninstall</button>
     {% elif device.status == "ERASED" %}
       {% if device.certificate_payload %}
       <a href="/devices/{{ device.id }}/certificate">Certificate &#9989;</a>
       {% else %}
       <small>Certificate pending (device offline)</small>
       {% endif %}
+    {% elif device.status == "LEFT" %}
+    <small>Left the rental</small>
     {% endif %}
   </td>
 </tr>
 {% endmacro %}
 
-{% macro audit_item(event, oob=False) %}
-<li id="audit-{{ event.id }}"{% if oob %} hx-swap-oob="afterbegin:#audit-log"{% endif %}>
+{% macro audit_item(event) %}
+<li id="audit-{{ event.id }}">
   <strong>{{ (event.created_at | jst).strftime("%H:%M:%S") }} JST</strong>
   - {{ event.action }} by {{ event.actor }}
   {% if event.details %}<br><small>{{ event.details }}</small>{% endif %}
 </li>
+{% endmacro %}
+
+{% macro audit_log_panel(events, oob=False) %}
+<ul id="audit-log"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for event in events %}
+  {{ audit_item(event) }}
+  {% endfor %}
+</ul>
 {% endmacro %}

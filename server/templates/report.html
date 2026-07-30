@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lantern audit report - {{ rental.label }}</title>
+  <style>
+    @page { size: A4; margin: 18mm 14mm; }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #111; line-height: 1.45; }
+    h1 { font-size: 17pt; margin: 0 0 2px 0; }
+    h2 { font-size: 12pt; margin: 22px 0 6px 0; border-bottom: 1px solid #999; padding-bottom: 3px; }
+    .subtitle { color: #555; margin: 0 0 4px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 8.5pt; }
+    th { background: #eee; }
+    tr { page-break-inside: avoid; }
+    .facts td { border: none; padding: 2px 10px 2px 0; font-size: 10pt; }
+    .facts td:first-child { color: #555; width: 150px; }
+    .ok { color: #0a6f2a; }
+    .pending { color: #a15c00; }
+    .sim { color: #555; font-style: italic; }
+    .signature { margin-top: 22px; border: 1px solid #999; padding: 10px; page-break-inside: avoid; }
+    .mono { font-family: Consolas, monospace; font-size: 7.5pt; word-break: break-all; }
+    .noprint { margin-bottom: 18px; }
+    @media print { .noprint { display: none; } }
+  </style>
+</head>
+<body>
+
+{% if not as_pdf %}
+<div class="noprint">
+  <a href="/rentals/{{ rental.id }}">&larr; Back to rental</a>
+  &nbsp;|&nbsp;
+  <button onclick="window.print()">Save as PDF / Print</button>
+  &nbsp;|&nbsp;
+  <a href="/rentals/{{ rental.id }}/report.pdf">Download PDF (WeasyPrint)</a>
+</div>
+{% endif %}
+
+<h1>Lantern audit report</h1>
+<p class="subtitle">{{ rental.label }} &mdash; {{ rental.customer.name }}</p>
+
+<table class="facts">
+  <tr><td>Rental ID</td><td>{{ rental.id }}</td></tr>
+  <tr><td>Status</td><td>{{ rental.status }}</td></tr>
+  <tr><td>Term start (JST)</td><td>{{ (rental.start_date | jst).strftime("%Y-%m-%d %H:%M") }}</td></tr>
+  <tr><td>Term end (JST)</td><td>{{ (rental.end_date | jst).strftime("%Y-%m-%d %H:%M") }}</td></tr>
+  <tr><td>Key epoch</td><td>{{ rental.key_epoch }} (increments on every extension, rotating every device's network key)</td></tr>
+  <tr><td>Sites</td><td>{{ rental.sites | map(attribute="name") | join(", ") or "-" }}</td></tr>
+  <tr><td>Report generated (JST)</td><td>{{ (generated_at | jst).strftime("%Y-%m-%d %H:%M:%S") }}</td></tr>
+</table>
+
+<h2>Summary</h2>
+<table class="facts">
+  <tr><td>Devices on this rental</td><td>{{ summary.device_count }}</td></tr>
+  <tr><td>Erased</td><td>{{ summary.erased }}</td></tr>
+  <tr><td>Erasure certificates issued</td><td>{{ summary.certificates }}{% if summary.erased > summary.certificates %} &mdash; {{ summary.erased - summary.certificates }} still pending (device offline){% endif %}</td></tr>
+  <tr><td>Revoked during the term</td><td>{{ summary.revoked }}</td></tr>
+  <tr><td>Left / uninstalled</td><td>{{ summary.left }}</td></tr>
+  <tr><td>Audit events recorded</td><td>{{ summary.event_count }}</td></tr>
+</table>
+
+<h2>Return checklist</h2>
+<table>
+  <thead><tr><th>Step</th><th>Completed</th><th>Source</th></tr></thead>
+  <tbody>
+    {% for item in checklist %}
+    <tr>
+      <td>{{ item.step }}</td>
+      <td class="{{ 'ok' if item.done == item.total and item.total else 'pending' }}">{{ item.done }} / {{ item.total }}</td>
+      <td>{% if item.simulated %}<span class="sim">simulated in this demo</span>{% else %}proven cryptographically{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Devices</h2>
+<table>
+  <thead>
+    <tr><th>Device</th><th>Asset tag</th><th>Model</th><th>Site</th><th>Status</th><th>Erasure certificate</th></tr>
+  </thead>
+  <tbody>
+    {% for line in device_lines %}
+    <tr>
+      <td>{{ line.device.label }}</td>
+      <td>{{ line.device.asset_tag or "-" }}</td>
+      <td>{{ line.device.model }}</td>
+      <td>{{ line.device.site.name if line.device.site else "-" }}</td>
+      <td>{{ line.device.status }}</td>
+      <td>
+        {% if line.verify_url %}
+        <span class="ok">Issued &amp; verified</span><br>
+        <span class="mono">{{ line.verify_url }}</span>
+        {% elif line.device.status == "ERASED" %}
+        <span class="pending">Pending &mdash; device offline at erasure</span>
+        {% else %}
+        -
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Audit trail</h2>
+<table>
+  <thead><tr><th>Time (JST)</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
+  <tbody>
+    {% for event in events %}
+    <tr>
+      <td>{{ (event.created_at | jst).strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      <td>{{ event.action }}</td>
+      <td>{{ event.actor }}</td>
+      <td>{{ event.details or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="signature">
+  <strong>Signature</strong>
+  <p>This report is signed with the Lantern server's Ed25519 key. Anyone can check it without logging in &mdash; open the link below. Change any character of it and the page turns red.</p>
+  <p class="mono">Signature: {{ signature }}</p>
+  <p class="mono">Server public key: {{ report_public_key }}</p>
+  <p class="mono">Verify: <a href="{{ report_verify_url }}">{{ report_verify_url }}</a></p>
+</div>
+
+</body>
+</html>

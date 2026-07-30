@@ -1,13 +1,32 @@
 {% extends "base.html" %}
-{% from "_fragments.html" import status_panel, device_row, audit_item %}
+{% from "_fragments.html" import status_panel, device_row, audit_log_panel, return_checklist_panel %}
 
 {% block content %}
 <div hx-ext="ws" ws-connect="/ws/rentals/{{ rental.id }}">
   <p><a href="/">&larr; All rentals</a></p>
   <h2>{{ rental.label }}</h2>
   <p>{{ rental.customer.name }}</p>
+  {% if rental.status == "ACTIVE" and rental.join_code %}
+  <p><small>Join code for new devices: <code>{{ rental.join_code }}</code> &mdash; give this to a device so it joins this rental instead of the shared test rental. It is a secret: anyone holding it can place a device into this rental, so it is shown only to people who can already see this page.</small></p>
+  {% endif %}
 
   {{ status_panel(rental) }}
+
+  <h3>Sites</h3>
+  <p><small>Each site is its own private network on its own interface, with its own shared folder key. A device in one site cannot see or reach a device in another, even though both are on this one contract.</small></p>
+  <p>
+    {% for site in rental.sites %}
+    <mark>{{ site.name }}</mark> ({{ rental.devices | selectattr("site_id", "equalto", site.id) | list | length }} devices)
+    {% else %}
+    <em>No sites yet.</em>
+    {% endfor %}
+  </p>
+  <form hx-post="/rentals/{{ rental.id }}/sites" hx-swap="none">
+    <fieldset role="group">
+      <input type="text" name="name" placeholder="New site name, e.g. Osaka Branch" required>
+      <button type="submit">Add site</button>
+    </fieldset>
+  </form>
 
   <h3>Devices</h3>
   <table>
@@ -28,12 +47,10 @@
     </tbody>
   </table>
 
+  {{ return_checklist_panel(rental, checklist) }}
+
   <h3>Activity</h3>
-  <ul id="audit-log">
-    {% for event in events %}
-    {{ audit_item(event) }}
-    {% endfor %}
-  </ul>
+  {{ audit_log_panel(events) }}
 </div>
 
 <script>

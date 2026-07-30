@@ -7,3 +7,11 @@ agent/identity.json
 PHASES.md
 LANTERN.md
 .pytest_cache/
+server/wg_hub_key.txt
+server/report_key.txt
+agent/.secrets_fallback/
+agent/lantern-wg.conf
+agent/lantern0.conf
+dist/
+build/
+*.spec
