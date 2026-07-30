@@ -13,6 +13,15 @@
   </tbody>
 </table>
 
+{% if user.customer and user.customer.signup_code %}
+<article style="border-left: 6px solid var(--pico-primary); padding-left: 1rem;">
+  <h3>Invite a teammate</h3>
+  <p><small>Anyone with this code can create their own account under <strong>{{ user.customer.name }}</strong> and see the same rentals and devices you do. Only share it with people who should have that access &mdash; treat it like a password.</small></p>
+  <p><code>{{ user.customer.signup_code }}</code></p>
+  <p><small>They create their own account at <code>/signup</code>, with their own name, email and password &mdash; this code only proves which company they belong to.</small></p>
+</article>
+{% endif %}
+
 <h3>Change password</h3>
 
 {% if done %}

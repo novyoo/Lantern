@@ -598,6 +598,70 @@ async def sign_in(request: Request, db: Session = Depends(get_db)):
     auth.set_session_cookie(request, response, token)
     return response
 
+SIGNUP_RATE_LIMIT_KEY = "__signup__"
+
+@app.get("/signup")
+def signup_page(request: Request, db: Session = Depends(get_db)):
+    if auth.user_for_token(db, request.cookies.get(auth.SESSION_COOKIE_NAME)):
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request, "signup.html", {"error": None, "name": "", "email": ""}
+    )
+
+@app.post("/signup")
+async def sign_up(request: Request, db: Session = Depends(get_db)):
+    form = await form_body(request)
+    name = (form.get("name") or "").strip()
+    email = (form.get("email") or "").strip().lower()
+    password = form.get("password") or ""
+    code = (form.get("company_code") or "").strip()
+    client_ip = request.client.host if request.client else "unknown"
+
+    def refuse(message):
+        return templates.TemplateResponse(
+            request, "signup.html", {"error": message, "name": name, "email": email}, status_code=400
+        )
+
+    if auth.login_is_blocked(client_ip, SIGNUP_RATE_LIMIT_KEY):
+        wait = auth.minutes_until_unblocked(client_ip, SIGNUP_RATE_LIMIT_KEY)
+        log.warning("signup blocked by rate limit from %s", client_ip)
+        return refuse(f"Too many signup attempts from this address. Try again in about {wait} minute(s).")
+
+    def fail(message):
+        auth.record_failed_login(client_ip, SIGNUP_RATE_LIMIT_KEY)
+        return refuse(message)
+
+    if not name or not email:
+        return fail("Name and email are required.")
+    if auth.find_user(db, email):
+        return fail("An account with that email already exists. Try signing in instead.")
+    customer = db.query(models.Customer).filter(models.Customer.signup_code == code).first()
+    if not code or customer is None or not secrets.compare_digest(customer.signup_code or "", code):
+        log.warning("signup rejected: bad company code from %s", client_ip)
+        return fail(
+            "That company invite code is not valid. Ask a teammate who already has an "
+            "account for the current one, on their Account page."
+        )
+    problem = auth.password_problem(password)
+    if problem:
+        return fail(problem)
+    user = models.User(
+        email=email,
+        name=name,
+        role=auth.MANAGER,
+        customer_id=customer.id,
+        password_hash=auth.hash_password(password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    auth.clear_failed_logins(client_ip, SIGNUP_RATE_LIMIT_KEY)
+    log.info("signup succeeded for %s at customer %s from %s", email, customer.name, client_ip)
+    token = auth.create_session(db, user)
+    response = RedirectResponse("/", status_code=303)
+    auth.set_session_cookie(request, response, token)
+    return response
+
 @app.post("/logout")
 def sign_out(request: Request, db: Session = Depends(get_db)):
     auth.delete_session(db, request.cookies.get(auth.SESSION_COOKIE_NAME))
@@ -652,9 +716,72 @@ def list_rentals(
     if user.role != auth.ADMIN:
         query = query.filter(models.Rental.customer_id == user.customer_id)
     rentals = query.order_by(models.Rental.end_date).all()
-    return templates.TemplateResponse(
-        request, "rentals.html", {"rentals": rentals, "user": user}
+    customers = (
+        db.query(models.Customer).order_by(models.Customer.name).all()
+        if user.role == auth.ADMIN
+        else []
     )
+    return templates.TemplateResponse(
+        request, "rentals.html", {"rentals": rentals, "customers": customers, "user": user}
+    )
+
+@app.post("/customers")
+async def create_customer(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(admin_only),
+):
+    form = await form_body(request)
+    name = (form.get("name") or "").strip()
+    email = (form.get("email") or "").strip().lower()
+    if not name or not email:
+        raise HTTPException(status_code=400, detail="A company needs a name and a contact email.")
+    customer = models.Customer(name=name, email=email, signup_code=secrets.token_urlsafe(9))
+    db.add(customer)
+    db.commit()
+    log.info("company created: %s by %s", name, actor_name(user))
+    return RedirectResponse("/", status_code=303)
+
+@app.post("/customers/{customer_id}/rentals")
+async def create_rental(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(admin_only),
+):
+    customer = db.get(models.Customer, customer_id)
+    if customer is None:
+        raise HTTPException(status_code=404)
+    form = await form_body(request)
+    label = (form.get("label") or "").strip()
+    try:
+        minutes = int(form.get("minutes") or 0)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Duration must be a whole number of minutes.")
+    if not label:
+        raise HTTPException(status_code=400, detail="A rental needs a label.")
+    if minutes < 1 or minutes > 43200:
+        raise HTTPException(status_code=400, detail="Duration must be between 1 minute and 30 days (43200 minutes).")
+    now = datetime.datetime.utcnow()
+    rental = models.Rental(
+        customer_id=customer.id,
+        label=label,
+        status="ACTIVE",
+        start_date=now,
+        end_date=now + datetime.timedelta(minutes=minutes),
+        join_code=secrets.token_urlsafe(9),
+    )
+    db.add(rental)
+    db.flush()
+    db.add(models.AuditEvent(
+        rental_id=rental.id,
+        action="rental_created",
+        actor=actor_name(user),
+        details=f"Rental created for {customer.name}, ending in {minutes} minute(s).",
+    ))
+    db.commit()
+    db.refresh(rental)
+    return RedirectResponse(f"/rentals/{rental.id}", status_code=303)
 
 @app.get("/rentals/{rental_id}")
 def rental_detail(

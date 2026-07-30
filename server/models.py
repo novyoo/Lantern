@@ -15,6 +15,7 @@ class Customer(Base):
     name = Column(Unicode(255), nullable=False)
     email = Column(Unicode(255), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    signup_code = Column(Unicode(100), nullable=True, unique=True, index=True)
 
     rentals = relationship("Rental", back_populates="customer")
 

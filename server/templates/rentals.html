@@ -37,6 +37,48 @@
   </tbody>
 </table>
 
+{% if user.role == "YRL Admin" %}
+<article>
+  <h3>Companies</h3>
+  <p><small>A company needs to exist here before anyone can sign up for it, and needs at least one rental before a signed-up teammate or a real device has anything to join.</small></p>
+  <table>
+    <thead><tr><th>Company</th><th>Signup code</th><th>Rentals</th><th>New rental</th></tr></thead>
+    <tbody>
+      {% for customer in customers %}
+      <tr>
+        <td>{{ customer.name }}</td>
+        <td>{% if customer.signup_code %}<code>{{ customer.signup_code }}</code>{% else %}<small>none</small>{% endif %}</td>
+        <td>{{ customer.rentals | length }}</td>
+        <td>
+          <form method="post" action="/customers/{{ customer.id }}/rentals" style="display:flex; gap: 0.5rem; align-items: center; margin: 0;">
+            <input type="text" name="label" placeholder="Label" required style="margin: 0;">
+            <input type="number" name="minutes" value="10" min="1" max="43200" required style="width: 6rem; margin: 0;" title="Minutes until it ends">
+            <button type="submit" style="width: auto; margin: 0;">Create</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <details>
+    <summary>Add a new company</summary>
+    <form method="post" action="/customers">
+      <label>
+        Company name
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Contact email
+        <input type="email" name="email" required>
+      </label>
+      <button type="submit">Create company</button>
+    </form>
+    <p><small>This generates that company's signup code. Only people you personally give the code to can create an account under it &mdash; there is no public, code-free way to sign up.</small></p>
+  </details>
+</article>
+{% endif %}
+
 <article>
   <h3>What Lantern collects, and what it never collects</h3>
   <p><small>A rental company can only promise privacy if it is unable to break it. Lantern is built so the server holds nothing it could read even if someone wanted to.</small></p>
