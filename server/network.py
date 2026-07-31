@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 HUB_KEY_FILE = os.path.join(os.path.dirname(__file__), "wg_hub_key.txt")
 LISTEN_PORT_BASE = 51000
 MAX_SITES_PER_RENTAL = 10
+COMMAND_TIMEOUT_SECONDS = 5
 
 def generate_keypair():
     private_key = x25519.X25519PrivateKey.generate()
@@ -64,7 +65,11 @@ def wg_tools_available():
     return shutil.which("wg") is not None and shutil.which("ip") is not None
 
 def _run(args, **kwargs):
-    return subprocess.run(args, capture_output=True, text=True, **kwargs)
+    kwargs.setdefault("timeout", COMMAND_TIMEOUT_SECONDS)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, **kwargs)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args, returncode=1, stdout="", stderr="timed out")
 
 def ensure_hub_interface(rental_id, site_index):
     if not wg_tools_available():

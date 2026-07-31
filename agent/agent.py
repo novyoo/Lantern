@@ -206,7 +206,7 @@ def sync_shared_files(identity):
     params = {"device_id": identity["device_id"]}
     headers = {"X-Agent-Token": identity["agent_token"]}
     try:
-        response = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync", params=params, headers=headers, timeout=5)
+        response = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync", params=params, headers=headers, timeout=15)
         response.raise_for_status()
         remote_files = {entry["filename"] for entry in response.json()}
     except requests.exceptions.RequestException:
@@ -219,7 +219,7 @@ def sync_shared_files(identity):
     for filename in remote_files - local_files:
         download = requests.get(
             f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}",
-            params=params, headers=headers, timeout=10,
+            params=params, headers=headers, timeout=20,
         )
         if download.status_code == 200:
             vault.save_shared_file_ciphertext(filename, download.content)
@@ -229,7 +229,7 @@ def sync_shared_files(identity):
         if blob:
             requests.post(
                 f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}",
-                params=params, headers=headers, data=blob, timeout=10,
+                params=params, headers=headers, data=blob, timeout=20,
             )
             print(f"Uploaded shared file for other devices to sync: {filename}")
 
@@ -251,7 +251,7 @@ def cli_leave():
         print("No identity.json found - nothing to leave.")
         return
     try:
-        requests.post(f"{SERVER_URL}/devices/{identity['device_id']}/leave", timeout=5)
+        requests.post(f"{SERVER_URL}/devices/{identity['device_id']}/leave", timeout=15)
     except requests.exceptions.RequestException:
         print("Could not reach the server - leaving locally anyway.")
     tunnel.bring_down()
@@ -303,7 +303,7 @@ def main():
                 body["certificate_payload"], body["certificate_signature"] = certificate
             if key_offers:
                 body["key_offers"] = key_offers
-            response = requests.post(f"{SERVER_URL}/agent/checkin", json=body, timeout=5)
+            response = requests.post(f"{SERVER_URL}/agent/checkin", json=body, timeout=15)
             if response.status_code == 401:
                 print("Server rejected this device's identity. Delete identity.json and restart to re-register.")
                 time.sleep(CHECKIN_INTERVAL_SECONDS)
