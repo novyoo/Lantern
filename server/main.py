@@ -12,6 +12,7 @@ from fastapi import (
     FastAPI,
     Request,
     Depends,
+    Header,
     HTTPException,
     Response,
     WebSocket,
@@ -1061,14 +1062,21 @@ def authenticate_device_for_rental(db, device_id, agent_token, rental_id):
     return device
 
 @app.get("/rentals/{rental_id}/sync")
-def list_sync_files(rental_id: int, device_id: int, agent_token: str, db: Session = Depends(get_db)):
+def list_sync_files(
+    rental_id: int, device_id: int, db: Session = Depends(get_db), agent_token: str = Header(alias="X-Agent-Token")
+):
     device = authenticate_device_for_rental(db, device_id, agent_token, rental_id)
     files = db.query(models.SyncFile).filter(models.SyncFile.site_id == device.site_id).all()
     return [{"filename": f.filename, "updated_at": f.updated_at.isoformat()} for f in files]
 
 @app.post("/rentals/{rental_id}/sync/{filename}")
 async def upload_sync_file(
-    rental_id: int, filename: str, device_id: int, agent_token: str, request: Request, db: Session = Depends(get_db)
+    rental_id: int,
+    filename: str,
+    device_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    agent_token: str = Header(alias="X-Agent-Token"),
 ):
     device = authenticate_device_for_rental(db, device_id, agent_token, rental_id)
     blob = await request.body()
@@ -1089,7 +1097,9 @@ async def upload_sync_file(
     return {"ok": True}
 
 @app.get("/rentals/{rental_id}/sync/{filename}")
-def download_sync_file(rental_id: int, filename: str, device_id: int, agent_token: str, db: Session = Depends(get_db)):
+def download_sync_file(
+    rental_id: int, filename: str, device_id: int, db: Session = Depends(get_db), agent_token: str = Header(alias="X-Agent-Token")
+):
     device = authenticate_device_for_rental(db, device_id, agent_token, rental_id)
     record = db.query(models.SyncFile).filter(
         models.SyncFile.site_id == device.site_id, models.SyncFile.filename == filename

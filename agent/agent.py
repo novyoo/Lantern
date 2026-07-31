@@ -21,6 +21,17 @@ SERVER_URL = os.environ.get("LANTERN_SERVER_URL", "http://127.0.0.1:8000")
 IDENTITY_FILE = os.path.join(app_dir(), "identity.json")
 CHECKIN_INTERVAL_SECONDS = 5
 
+def describe_request_error(error):
+    response = getattr(error, "response", None)
+    if response is not None:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = None
+        if detail:
+            return f"server said: {detail}"
+    return str(error)
+
 def load_identity():
     if not os.path.exists(IDENTITY_FILE):
         return None
@@ -40,7 +51,7 @@ def register():
         body["join_code"] = join_code
     if site:
         body["site"] = site
-    response = requests.post(f"{SERVER_URL}/agent/register", json=body)
+    response = requests.post(f"{SERVER_URL}/agent/register", json=body, timeout=10)
     response.raise_for_status()
     identity = response.json()
     identity["workspace_scope"] = vault.workspace_scope(identity["rental_id"], identity["site_id"])
@@ -184,15 +195,18 @@ def materialize_synced_files(identity):
         print(f"Decrypted and added to C:\\Lantern: {filename}")
 
 def is_safe_filename(name):
-    return bool(name) and name not in (".", "..") and "/" not in name and "\\" not in name
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        return False
+    return name.lower() not in vault.RESERVED_FILENAMES
 
 def sync_shared_files(identity):
     if vault.get_workspace_key(identity.get("workspace_scope")) is None:
         return
     rental_id = identity["rental_id"]
-    params = {"device_id": identity["device_id"], "agent_token": identity["agent_token"]}
+    params = {"device_id": identity["device_id"]}
+    headers = {"X-Agent-Token": identity["agent_token"]}
     try:
-        response = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync", params=params, timeout=5)
+        response = requests.get(f"{SERVER_URL}/rentals/{rental_id}/sync", params=params, headers=headers, timeout=5)
         response.raise_for_status()
         remote_files = {entry["filename"] for entry in response.json()}
     except requests.exceptions.RequestException:
@@ -204,7 +218,8 @@ def sync_shared_files(identity):
     local_files = set(vault.list_local_shared_files())
     for filename in remote_files - local_files:
         download = requests.get(
-            f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}", params=params, timeout=10
+            f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}",
+            params=params, headers=headers, timeout=10,
         )
         if download.status_code == 200:
             vault.save_shared_file_ciphertext(filename, download.content)
@@ -214,7 +229,7 @@ def sync_shared_files(identity):
         if blob:
             requests.post(
                 f"{SERVER_URL}/rentals/{rental_id}/sync/{quote(filename, safe='')}",
-                params=params, data=blob, timeout=10,
+                params=params, headers=headers, data=blob, timeout=10,
             )
             print(f"Uploaded shared file for other devices to sync: {filename}")
 
@@ -262,7 +277,7 @@ def main():
         try:
             identity = register()
         except requests.exceptions.RequestException as error:
-            print(f"Could not reach server to register ({error}). Retrying in {CHECKIN_INTERVAL_SECONDS}s.")
+            print(f"Could not register ({describe_request_error(error)}). Retrying in {CHECKIN_INTERVAL_SECONDS}s.")
             time.sleep(CHECKIN_INTERVAL_SECONDS)
     current_status = None
     certificate = None
@@ -314,7 +329,7 @@ def main():
                 print("Leave complete. This agent will now exit.")
                 return
         except requests.exceptions.RequestException as error:
-            print(f"Could not reach server ({error}). Staying in last known state and retrying.")
+            print(f"Could not reach server ({describe_request_error(error)}). Staying in last known state and retrying.")
         except Exception:
             print("Unexpected error this cycle - staying up and retrying instead of exiting.")
             traceback.print_exc()

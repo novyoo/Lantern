@@ -47,12 +47,24 @@ def write_config(private_key_b64, own_ip, hub_public_key_b64, hub_endpoint, allo
         f.write(text)
     return CONFIG_PATH
 
+def _windows_tunnel_service_exists():
+    result = subprocess.run(
+        ["sc", "query", f"WireGuardTunnel${INTERFACE_NAME}"],
+        capture_output=True, text=True, timeout=COMMAND_TIMEOUT_SECONDS,
+    )
+    return result.returncode == 0
+
 def bring_up():
     if not wg_available():
         print("WireGuard is not installed on this machine - network join simulated only.")
         return False
     try:
         if is_windows():
+            if _windows_tunnel_service_exists():
+                subprocess.run(
+                    [find_wireguard_exe(), "/uninstalltunnelservice", INTERFACE_NAME],
+                    check=False, timeout=COMMAND_TIMEOUT_SECONDS,
+                )
             subprocess.run(
                 [find_wireguard_exe(), "/installtunnelservice", CONFIG_PATH],
                 check=True, timeout=COMMAND_TIMEOUT_SECONDS,
