@@ -6,9 +6,14 @@ After=network-online.target
 User=azureuser
 WorkingDirectory=/home/azureuser/Lantern/server
 EnvironmentFile=/etc/lantern.env
-ExecStart=/home/azureuser/lantern-venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-AmbientCapabilities=CAP_NET_ADMIN
-CapabilityBoundingSet=CAP_NET_ADMIN
+# Bound to localhost: Caddy terminates TLS in front and proxies to us, so the
+# app port is never exposed to the internet directly.
+ExecStart=/home/azureuser/lantern-venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+# No CAP_NET_ADMIN. The server used to build WireGuard interfaces itself, which
+# meant running privileged; Tailscale does the networking now and this process
+# is an ordinary web app again.
+NoNewPrivileges=true
+PrivateTmp=true
 Restart=always
 RestartSec=5
 

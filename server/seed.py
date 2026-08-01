@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+import itertools
 import secrets
 import uuid
 
@@ -14,6 +16,7 @@ db = SessionLocal()
 
 db.query(models.SyncFile).delete()
 db.query(models.AuditEvent).delete()
+db.query(models.Assignment).delete()
 db.query(models.Device).delete()
 db.query(models.Site).delete()
 db.query(models.UserSession).delete()
@@ -114,8 +117,18 @@ add_audit(rental5, "auto_lock", "system", "Rental term ended, all devices locked
 add_audit(rental5, "erasure_confirmed", "Customer Manager", "Customer confirmed erasure, keys destroyed fleet-wide.")
 db.commit()
 
+tailnet_counter = itertools.count()
+
 def add_site(rental, name, index):
-    site = models.Site(rental_id=rental.id, name=name, network_index=index)
+    site = models.Site(
+        rental_id=rental.id, name=name, network_index=index,
+        tailnet_index=next(tailnet_counter),
+        # Published when the site's workspace key was created, at the start of
+        # the rental. Erasure certificates are checked against it.
+        key_commitment=hashlib.sha256(
+            b"lantern-key-commitment-v1" + secrets.token_bytes(32)
+        ).hexdigest(),
+    )
     db.add(site)
     return site
 
@@ -153,6 +166,14 @@ device_plan = [
 
 CERTIFICATES_ON_ERASED_RENTAL = 17
 returning_assets = []
+# asset tag -> the rental it was erased from, so a re-rented laptop carries a
+# real placement history rather than an implied one.
+previously_erased_assets = {}
+# The nonce a human's erasure confirmation issued. Certificates quote it, and
+# the public verify page checks it, so they cannot have been signed in advance.
+rental5.erasure_nonce = secrets.token_hex(16)
+rental5.erasure_confirmed_at = rental5.end_date
+db.commit()
 reuse_plan = {tokyo1.id: 8, main3.id: 7, tokyo6.id: 5}
 
 recovery_keys_by_rental = {}
@@ -191,31 +212,57 @@ for rental, site, status, count in device_plan:
             asset_tag = next_asset_tag()
         device_key = crypto.generate_key()
         wrapped_blob = crypto.wrap_device_key(recovery_key, device_key)
+        reused_asset = asset_tag in previously_erased_assets
         device = models.Device(
             rental_id=rental.id,
             site_id=site.id,
             label=f"{rental.label} - {seq:02d}",
             model=device_models[device_count % len(device_models)],
             status=status,
+            state="ASSIGNED",
+            enrollment_key=secrets.token_urlsafe(12),
+            enrolled_at=rental.start_date,
             asset_tag=asset_tag,
             autopilot_id=simulated_autopilot_id(asset_tag),
             wrapped_key_blob=crypto.to_base64(wrapped_blob),
-            wg_key_epoch=rental.key_epoch,
+            key_epoch=rental.key_epoch,
         )
         db.add(device)
         db.flush()
 
+        # A laptop that already served an erased rental carries that history, so
+        # the reuse metrics count real placements rather than guessing from tags.
+        if reused_asset:
+            db.add(models.Assignment(
+                device_id=device.id,
+                rental_id=previously_erased_assets[asset_tag].id,
+                site_id=main5.id,
+                assigned_at=previously_erased_assets[asset_tag].start_date,
+                released_at=previously_erased_assets[asset_tag].end_date,
+                end_state="ERASED",
+            ))
+        db.add(models.Assignment(
+            device_id=device.id,
+            rental_id=rental.id,
+            site_id=site.id,
+            assigned_at=rental.start_date,
+        ))
+
         if status == "ERASED":
             returning_assets.append(asset_tag)
+            previously_erased_assets[asset_tag] = rental
             if i < CERTIFICATES_ON_ERASED_RENTAL:
                 signing_key = certificates.generate_signing_key()
                 payload_json, signature = certificates.sign_certificate(signing_key, {
                     "device_id": device.id,
                     "rental_id": rental.id,
+                    "site_id": site.id,
                     "device_label": device.label,
-                    "agent_version": "1.0",
+                    "agent_version": "2.0",
                     "erased_at": rental.end_date.isoformat() + "Z",
                     "reason": "Rental erasure confirmed",
+                    "key_commitment": site.key_commitment,
+                    "erasure_nonce": rental.erasure_nonce,
                 })
                 device.public_key = certificates.public_key_base64(signing_key)
                 device.certificate_payload = payload_json

@@ -1,0 +1,27 @@
+# Lantern HTTPS front door.
+#
+# Caddy gets and renews a free Let's Encrypt certificate automatically and
+# proxies to the app on localhost. Replace the hostname with yours and put this
+# at /etc/caddy/Caddyfile.
+#
+# Agent tokens and enrollment keys travel over this connection. Without it they
+# cross the public internet in the clear, so this is not optional.
+
+lantern.example.com {
+    encode gzip
+
+    # WebSocket upgrade for the live dashboard is handled by reverse_proxy
+    # automatically - no extra config needed.
+    reverse_proxy 127.0.0.1:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+    }
+
+    log {
+        output file /var/log/caddy/lantern.log
+    }
+}

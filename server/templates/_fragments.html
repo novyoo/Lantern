@@ -72,8 +72,10 @@
       {% if device.confirmed_status and device.confirmed_status != device.status %}
       <br><small>agent still applying &mdash; last confirmed {{ device.confirmed_status }}</small>
       {% endif %}
-      {% if device.wg_ip and device.status == "ACTIVE" %}
-      <br><small>Network: {{ device.wg_ip }}{% if device.has_workspace_key %} &mdash; shared folder unlocked{% endif %}</small>
+      {% if device.tailscale_ip and device.status == "ACTIVE" %}
+      <br><small>Network: {{ device.tailscale_ip }}{% if device.has_workspace_key %} &mdash; shared folder unlocked{% endif %}</small>
+      {% elif device.status == "ACTIVE" and device.has_workspace_key %}
+      <br><small>Shared folder unlocked</small>
       {% endif %}
     {% else %}
     -
@@ -88,11 +90,18 @@
     {% elif device.status == "ERASED" %}
       {% if device.certificate_payload %}
       <a href="/devices/{{ device.id }}/certificate">Certificate &#9989;</a>
+      <form method="post" action="/devices/{{ device.id }}/release" style="display:inline; margin:0;"
+            onsubmit="return confirm('Return {{ device.label }} to the fleet pool? It becomes available for the next customer.');">
+        <button type="submit" class="secondary outline" style="width:auto; margin:0; padding:0.2rem 0.6rem;">Return to fleet</button>
+      </form>
       {% else %}
-      <small>Certificate pending (device offline)</small>
+      <small>Certificate pending (device offline) &mdash; cannot be re-rented yet</small>
       {% endif %}
     {% elif device.status == "LEFT" %}
     <small>Left the rental</small>
+    <form method="post" action="/devices/{{ device.id }}/release" style="display:inline; margin:0;">
+      <button type="submit" class="secondary outline" style="width:auto; margin:0; padding:0.2rem 0.6rem;">Return to fleet</button>
+    </form>
     {% endif %}
   </td>
 </tr>

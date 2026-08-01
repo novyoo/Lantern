@@ -29,6 +29,40 @@
   </form>
 
   <h3>Devices</h3>
+  {% if user.role == "YRL Admin" and rental.status == "ACTIVE" %}
+  <details{% if not devices %} open{% endif %}>
+    <summary>Assign devices from the fleet ({{ available | length }} available)</summary>
+    {% if available %}
+    <form method="post" action="/rentals/{{ rental.id }}/assign">
+      <fieldset>
+        {% for device in available %}
+        <label>
+          <input type="checkbox" name="device_id" value="{{ device.id }}">
+          {{ device.label }} <small>({{ device.model }}{% if device.owner_note %} &mdash; {{ device.owner_note }}{% endif %})</small>
+        </label>
+        {% endfor %}
+      </fieldset>
+      {% if rental.sites | length > 1 %}
+      <label>
+        Put them in site
+        <select name="site_id">
+          {% for site in rental.sites %}
+          <option value="{{ site.id }}">{{ site.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endif %}
+      <button type="submit">Assign to this rental</button>
+    </form>
+    <p><small>The laptops are not touched. Each one finds out on its next check-in &mdash;
+    within a few seconds &mdash; and joins the network, picks up the workspace key and starts
+    syncing on its own.</small></p>
+    {% else %}
+    <p><small>No devices in the pool. <a href="/fleet">Add one to the fleet</a> first, and have
+    it run the agent once so it enrolls.</small></p>
+    {% endif %}
+  </details>
+  {% endif %}
   <table>
     <thead>
       <tr>

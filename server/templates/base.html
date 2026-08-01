@@ -14,7 +14,7 @@
       {% if user %}
       <nav>
         <a href="/">Rentals</a>
-        {% if user.role == "YRL Admin" %} &middot; <a href="/metrics">Reuse metrics</a>{% endif %}
+        {% if user.role == "YRL Admin" %} &middot; <a href="/fleet">Fleet</a> &middot; <a href="/metrics">Reuse metrics</a>{% endif %}
         &middot; <a href="/account">{{ user.name }} ({{ user.role }})</a>
         &middot; <form method="post" action="/logout" style="display: inline;"><button type="submit" class="secondary outline" style="display: inline; width: auto; padding: 0.2rem 0.6rem;">Sign out</button></form>
       </nav>

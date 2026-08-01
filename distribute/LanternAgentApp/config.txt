@@ -1,2 +1,2 @@
-LANTERN_SERVER_URL=http://172.198.136.137:8000
-LANTERN_JOIN_CODE=<enter code>
+LANTERN_SERVER_URL=https://lantern.example.com
+LANTERN_ENROLLMENT_KEY=<paste the key you were given>

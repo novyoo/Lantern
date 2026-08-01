@@ -28,6 +28,7 @@
 <table>
   <thead>
     <tr>
+      <th>Device</th>
       <th>Asset tag</th>
       <th>Rentals</th>
       <th>Customers served</th>
@@ -37,10 +38,11 @@
   <tbody>
     {% for row in reused %}
     <tr>
+      <td>{{ row.label }}</td>
       <td>{{ row.asset_tag }}</td>
       <td>{{ row.rentals }}</td>
       <td>{{ row.customers | join(", ") }}</td>
-      <td>{{ (row.latest | jst).strftime("%Y-%m-%d") }}</td>
+      <td>{% if row.latest %}{{ (row.latest | jst).strftime("%Y-%m-%d") }}{% else %}&mdash;{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

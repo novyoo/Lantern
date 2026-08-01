@@ -1,0 +1,17 @@
+[Unit]
+Description=Lantern agent (device)
+After=network-online.target tailscaled.service
+
+[Service]
+User=azureuser
+WorkingDirectory=/home/azureuser/Lantern/agent
+EnvironmentFile=/etc/lantern-agent.env
+ExecStart=/home/azureuser/lantern-agent-venv/bin/python agent.py
+# The agent shells out to the tailscale CLI, which talks to tailscaled over a
+# local socket - so this needs no network capabilities of its own. It used to
+# hold CAP_NET_ADMIN to build a WireGuard interface directly.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
