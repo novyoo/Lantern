@@ -19,6 +19,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 @app.middleware("http")
@@ -106,6 +108,24 @@ def jst(value):
     return value + datetime.timedelta(hours=9)
 
 templates.env.filters["jst"] = jst
+
+BADGE_CLASSES = {
+    "ACTIVE": "badge-blue",
+    "ASSIGNED": "badge-blue",
+    "AVAILABLE": "badge-green",
+    "LOCKED": "badge-red",
+    "REVOKED": "badge-red",
+    "ERASED": "badge-gray",
+    "LEFT": "badge-gray",
+    "IDLE": "badge-gray",
+    "UNCLAIMED": "badge-gray",
+    "RETIRED": "badge-gray",
+}
+
+def badge_class(value):
+    return BADGE_CLASSES.get((value or "").upper(), "badge-dark")
+
+templates.env.filters["badge_class"] = badge_class
 
 class NeedsLogin(Exception):
     pass

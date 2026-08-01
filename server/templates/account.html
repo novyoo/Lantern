@@ -1,58 +1,60 @@
 {% extends "base.html" %}
 
 {% block content %}
-<p><a href="/">&larr; All rentals</a></p>
+<a href="/" class="back-link">&larr; All rentals</a>
 <h2>Your account</h2>
 
-<table>
-  <tbody>
-    <tr><th>Name</th><td>{{ user.name }}</td></tr>
-    <tr><th>Email</th><td>{{ user.email }}</td></tr>
-    <tr><th>Role</th><td><mark>{{ user.role }}</mark></td></tr>
-    <tr><th>Customer</th><td>{{ user.customer.name if user.customer else "All customers" }}</td></tr>
-  </tbody>
-</table>
+<div class="card-grid">
+  <article class="card-yellow">
+    <table>
+      <tbody>
+        <tr><th>Name</th><td>{{ user.name }}</td></tr>
+        <tr><th>Email</th><td>{{ user.email }}</td></tr>
+        <tr><th>Role</th><td><mark class="badge {{ user.role | badge_class }}">{{ user.role }}</mark></td></tr>
+        <tr><th>Customer</th><td>{{ user.customer.name if user.customer else "All customers" }}</td></tr>
+      </tbody>
+    </table>
+  </article>
 
-{% if user.customer and user.customer.signup_code %}
-<article style="border-left: 6px solid var(--pico-primary); padding-left: 1rem;">
-  <h3>Invite a teammate</h3>
-  <p><small>Anyone with this code can create their own account under <strong>{{ user.customer.name }}</strong> and see the same rentals and devices you do. Only share it with people who should have that access &mdash; treat it like a password.</small></p>
-  <p><code>{{ user.customer.signup_code }}</code></p>
-  <p><small>They create their own account at <code>/signup</code>, with their own name, email and password &mdash; this code only proves which company they belong to.</small></p>
+  {% if user.customer and user.customer.signup_code %}
+  <article class="card-blue">
+    <h3>Invite a teammate</h3>
+    <p><small>Anyone with this code can create their own account under <strong>{{ user.customer.name }}</strong> and see the same rentals and devices you do. Only share it with people who should have that access, treat it like a password.</small></p>
+    <p><code>{{ user.customer.signup_code }}</code></p>
+    <p><small>They create their own account at <code>/signup</code>, with their own name, email and password, this code only proves which company they belong to.</small></p>
+  </article>
+  {% endif %}
+</div>
+
+<article class="card-pink">
+  <h3>Change password</h3>
+
+  {% if done %}
+  <div class="alert alert-success"><strong>Password changed. Every other signed-in session for this account was signed out.</strong></div>
+  {% endif %}
+
+  {% if error %}
+  <div class="alert alert-error"><strong>{{ error }}</strong></div>
+  {% endif %}
+
+  <form method="post" action="/account/password">
+    <label>
+      Current password
+      <input type="password" name="current_password" required>
+    </label>
+    <label>
+      New password
+      <input type="password" name="new_password" required minlength="12">
+    </label>
+    <button type="submit">Change password</button>
+  </form>
 </article>
-{% endif %}
-
-<h3>Change password</h3>
-
-{% if done %}
-<article style="border-left: 6px solid green; padding-left: 1rem;">
-  <strong style="color: green;">Password changed. Every other signed-in session for this account was signed out.</strong>
-</article>
-{% endif %}
-
-{% if error %}
-<article style="border-left: 6px solid red; padding-left: 1rem;">
-  <strong style="color: red;">{{ error }}</strong>
-</article>
-{% endif %}
-
-<form method="post" action="/account/password">
-  <label>
-    Current password
-    <input type="password" name="current_password" required>
-  </label>
-  <label>
-    New password
-    <input type="password" name="new_password" required minlength="12">
-  </label>
-  <button type="submit">Change password</button>
-</form>
 
 <article>
   <h3>How a new password is checked</h3>
   <ol>
     <li>It must be at least 12 characters long.</li>
-    <li>It is checked against the public list of passwords found in real data breaches &mdash; without sending the password anywhere. The password is hashed, and only the <strong>first five characters of that hash</strong> leave this server. The breach service answers with every leaked hash starting with those five characters, and the matching happens here. The service never learns which password was asked about. That trick is called k-anonymity.</li>
+    <li>It is checked against the public list of passwords found in real data breaches, without sending the password anywhere. The password is hashed, and only the <strong>first five characters of that hash</strong> leave this server. The breach service answers with every leaked hash starting with those five characters, and the matching happens here. The service never learns which password was asked about. That trick is called k-anonymity.</li>
   </ol>
   <p><small>Try <code>passwordpassword</code> to see a real breached password rejected. It is long enough, and it is still refused.</small></p>
 </article>

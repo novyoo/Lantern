@@ -1,45 +1,47 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Create your account</h2>
+<div class="card-grid">
+  <article class="card-yellow">
+    <h2>Create your account</h2>
 
-{% if error %}
-<article style="border-left: 6px solid red; padding-left: 1rem;">
-  <strong style="color: red;">{{ error }}</strong>
-</article>
-{% endif %}
+    {% if error %}
+    <div class="alert alert-error"><strong>{{ error }}</strong></div>
+    {% endif %}
 
-<form method="post" action="/signup">
-  <label>
-    Your name
-    <input type="text" name="name" value="{{ name }}" required autofocus>
-  </label>
-  <label>
-    Work email
-    <input type="email" name="email" value="{{ email }}" required>
-  </label>
-  <label>
-    Password
-    <input type="password" name="password" required minlength="12">
-  </label>
-  <label>
-    Company invite code
-    <input type="text" name="company_code" required>
-  </label>
-  <button type="submit">Create account</button>
-</form>
+    <form method="post" action="/signup">
+      <label>
+        Your name
+        <input type="text" name="name" value="{{ name }}" required autofocus>
+      </label>
+      <label>
+        Work email
+        <input type="email" name="email" value="{{ email }}" required>
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" required minlength="12">
+      </label>
+      <label>
+        Company invite code
+        <input type="text" name="company_code" required>
+      </label>
+      <button type="submit">Create account</button>
+    </form>
 
-<p><small>Already have an account? <a href="/login">Sign in</a> instead.</small></p>
+    <p><small>Already have an account? <a href="/login">Sign in</a> instead.</small></p>
+  </article>
 
-<article>
-  <h3>What the invite code is for</h3>
-  <p><small>Lantern has no open, public signup. The invite code proves you belong to a specific company &mdash; it is how the server decides which company's rentals and devices you are allowed to see. Get it from a teammate who already has an account: it is shown on their <a href="/account">Account</a> page. Without a valid code, no account can be created, for anyone.</small></p>
-</article>
+  <article class="card-pink">
+    <h4>What the invite code is for</h4>
+    <p><small>Lantern has no open, public signup. The invite code proves you belong to a specific company, it is how the server decides which company's rentals and devices you are allowed to see. Get it from a teammate who already has an account: it is shown on their <a href="/account">Account</a> page. Without a valid code, no account can be created, for anyone.</small></p>
+  </article>
+</div>
 
-<article>
-  <h3>What this page does not do</h3>
+<article class="card-green">
+  <h4>What this page does not do</h4>
   <ul>
-    <li>Your password is checked against 12-character minimum length and against real leaked-password data before the account is created &mdash; the same rule this project enforces everywhere else.</li>
+    <li>Your password is checked against a 12-character minimum length and against real leaked-password data before the account is created, the same rule this project enforces everywhere else.</li>
     <li>No password or token is ever stored in the browser's localStorage. Signing up signs you in the same way logging in does: one <code>httpOnly</code> cookie holding a random session number.</li>
     <li>Five failed attempts from the same address locks out further attempts for fifteen minutes, whether the failure was a wrong invite code, a weak password, or an email that is already taken.</li>
   </ul>

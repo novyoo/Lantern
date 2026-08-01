@@ -4,24 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lantern</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="/static/lantern.css">
 </head>
 <body>
-  <main class="container">
-    <header>
-      <h1>Lantern</h1>
-      <p>Rent a secure workspace, not just hardware.</p>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <h1>LANTERN</h1>
+        <p class="tagline">Rent a secure workspace, not just hardware.</p>
+      </div>
       {% if user %}
-      <nav>
-        <a href="/">Rentals</a>
-        {% if user.role == "YRL Admin" %} &middot; <a href="/fleet">Fleet</a> &middot; <a href="/metrics">Reuse metrics</a>{% endif %}
-        &middot; <a href="/account">{{ user.name }} ({{ user.role }})</a>
-        &middot; <form method="post" action="/logout" style="display: inline;"><button type="submit" class="secondary outline" style="display: inline; width: auto; padding: 0.2rem 0.6rem;">Sign out</button></form>
-      </nav>
+      <form method="post" action="/logout">
+        <button type="submit" class="btn-signout">Sign out</button>
+      </form>
       {% endif %}
     </header>
-    {% block content %}{% endblock %}
-  </main>
+
+    {% if user %}
+    <nav class="tabs">
+      <a href="/" class="tab{% if request.url.path == '/' or request.url.path.startswith('/rentals') %} active{% endif %}">Rental</a>
+      {% if user.role == "YRL Admin" %}
+      <a href="/fleet" class="tab{% if request.url.path.startswith('/fleet') %} active{% endif %}">Fleet</a>
+      <a href="/metrics" class="tab{% if request.url.path.startswith('/metrics') %} active{% endif %}">Reuse Metrics</a>
+      {% endif %}
+      <a href="/account" class="tab user-tab{% if request.url.path.startswith('/account') %} active{% endif %}">{{ user.name }} ({{ user.role }})</a>
+    </nav>
+    {% endif %}
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script>
 </body>

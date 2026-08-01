@@ -37,7 +37,7 @@
 {% endif %}
 
 <h1>Lantern audit report</h1>
-<p class="subtitle">{{ rental.label }} &mdash; {{ rental.customer.name }}</p>
+<p class="subtitle">{{ rental.label }}, {{ rental.customer.name }}</p>
 
 <table class="facts">
   <tr><td>Rental ID</td><td>{{ rental.id }}</td></tr>
@@ -53,7 +53,7 @@
 <table class="facts">
   <tr><td>Devices on this rental</td><td>{{ summary.device_count }}</td></tr>
   <tr><td>Erased</td><td>{{ summary.erased }}</td></tr>
-  <tr><td>Erasure certificates issued</td><td>{{ summary.certificates }}{% if summary.erased > summary.certificates %} &mdash; {{ summary.erased - summary.certificates }} still pending (device offline){% endif %}</td></tr>
+  <tr><td>Erasure certificates issued</td><td>{{ summary.certificates }}{% if summary.erased > summary.certificates %}, {{ summary.erased - summary.certificates }} still pending (device offline){% endif %}</td></tr>
   <tr><td>Revoked during the term</td><td>{{ summary.revoked }}</td></tr>
   <tr><td>Left / uninstalled</td><td>{{ summary.left }}</td></tr>
   <tr><td>Audit events recorded</td><td>{{ summary.event_count }}</td></tr>
@@ -91,7 +91,7 @@
         <span class="ok">Issued &amp; verified</span><br>
         <span class="mono">{{ line.verify_url }}</span>
         {% elif line.device.status == "ERASED" %}
-        <span class="pending">Pending &mdash; device offline at erasure</span>
+        <span class="pending">Pending, device offline at erasure</span>
         {% else %}
         -
         {% endif %}
@@ -118,7 +118,7 @@
 
 <div class="signature">
   <strong>Signature</strong>
-  <p>This report is signed with the Lantern server's Ed25519 key. Anyone can check it without logging in &mdash; open the link below. Change any character of it and the page turns red.</p>
+  <p>This report is signed with the Lantern server's Ed25519 key. Anyone can check it without logging in, open the link below. Change any character of it and the page turns red.</p>
   <p class="mono">Signature: {{ signature }}</p>
   <p class="mono">Server public key: {{ report_public_key }}</p>
   <p class="mono">Verify: <a href="{{ report_verify_url }}">{{ report_verify_url }}</a></p>

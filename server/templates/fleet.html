@@ -1,129 +1,133 @@
 {% extends "base.html" %}
 
 {% block content %}
-<p><a href="/">&larr; All rentals</a></p>
+<a href="/" class="back-link">&larr; All rentals</a>
 <h2>Fleet</h2>
 <p>Every laptop YRL owns, whether or not it is out with a customer. A device is
 added here <strong>once</strong>, enrolls <strong>once</strong>, and then sits in the pool until you
-assign it to a rental. Assignment happens entirely on this side &mdash; nobody
+assign it to a rental. Assignment happens entirely on this side, nobody
 touches the laptop when a rental starts.</p>
 
-<article {% if not tailscale.configured %}style="border-left: 6px solid #a15c00; padding-left: 1rem;"{% endif %}>
+<article class="{{ 'card-blue' if tailscale.configured else 'card-warn' }}">
   <h3>Private network</h3>
   {% if tailscale.configured %}
-  <p>&#9679; Tailscale connected &mdash; tailnet <code>{{ tailscale.tailnet }}</code>,
+  <p>&#9679; Tailscale connected, tailnet <code>{{ tailscale.tailnet }}</code>,
      {{ tailscale.tag_pool_size }} site tags available.</p>
   <p><small>Each site draws one tag from the pool. The tailnet policy only lets a tag
      reach itself, so a device in one rental cannot route to a device in another.
      <a href="/fleet/tailnet-policy">View the policy file</a> to paste into the Tailscale console.</small></p>
   {% else %}
   <p>&#9675; Tailscale is not configured. Devices still enroll, sync files, lock and
-     erase &mdash; they just will not join a private network.</p>
+     erase, they just will not join a private network.</p>
   <p><small>Set <code>TAILSCALE_API_KEY</code> on the server and restart to turn the network layer on.</small></p>
   {% endif %}
 </article>
 
-<h3>Add a device</h3>
-<form method="post" action="/fleet/devices">
-  <div class="grid">
-    <label>
-      Label
-      <input type="text" name="label" placeholder="e.g. Rahul's ThinkPad" required>
-    </label>
-    <label>
-      Model
-      <input type="text" name="model" placeholder="e.g. ThinkPad X1">
-    </label>
-  </div>
-  <div class="grid">
-    <label>
-      Asset tag
-      <input type="text" name="asset_tag" placeholder="e.g. YRL-0041">
-    </label>
-    <label>
-      Note to self
-      <input type="text" name="owner_note" placeholder="e.g. friend, returns in August">
-    </label>
-  </div>
-  <button type="submit">Add to fleet</button>
-</form>
+<article>
+  <h3>Add a device</h3>
+  <form method="post" action="/fleet/devices">
+    <div class="grid">
+      <label>
+        Label
+        <input type="text" name="label" placeholder="e.g. Rahul's ThinkPad" required>
+      </label>
+      <label>
+        Model
+        <input type="text" name="model" placeholder="e.g. ThinkPad X1">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Asset tag
+        <input type="text" name="asset_tag" placeholder="e.g. YRL-0041">
+      </label>
+      <label>
+        Note to self
+        <input type="text" name="owner_note" placeholder="e.g. friend, returns in August">
+      </label>
+    </div>
+    <button type="submit" class="btn-accent">Add to fleet</button>
+  </form>
+</article>
 
 <h3>Devices ({{ devices | length }})</h3>
-<table>
-  <thead>
-    <tr>
-      <th>Device</th>
-      <th>State</th>
-      <th>Currently in</th>
-      <th>Agent</th>
-      <th>Enrollment key</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for device in devices %}
-    <tr>
-      <td>
-        {{ device.label }}<br>
-        <small>{{ device.model }}{% if device.asset_tag %} &middot; {{ device.asset_tag }}{% endif %}</small>
-        {% if device.hostname %}<br><small>machine: <code>{{ device.hostname }}</code></small>{% endif %}
-        {% if device.owner_note %}<br><small><em>{{ device.owner_note }}</em></small>{% endif %}
-      </td>
-      <td>
-        <mark>{{ device.state }}</mark>
-        {% if device.state == "UNCLAIMED" %}<br><small>waiting for first run</small>{% endif %}
-      </td>
-      <td>
-        {% if device.rental %}
-        <a href="/rentals/{{ device.rental.id }}">{{ device.rental.label }}</a><br>
-        <small>{{ device.rental.customer.name }} &middot; {{ device.status }}</small>
-        {% else %}
-        <small>in the pool</small>
-        {% endif %}
-      </td>
-      <td>
-        {% if device.last_seen_at %}
-          {% set seconds_since_seen = (now - device.last_seen_at).total_seconds() %}
-          {% if seconds_since_seen < offline_after %}
-          <span style="color: green;">&#9679; Online</span>
+<article class="card-yellow">
+  <table>
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th>State</th>
+        <th>Currently in</th>
+        <th>Agent</th>
+        <th>Enrollment key</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for device in devices %}
+      <tr>
+        <td>
+          {{ device.label }}<br>
+          <small>{{ device.model }}{% if device.asset_tag %} &middot; {{ device.asset_tag }}{% endif %}</small>
+          {% if device.hostname %}<br><small>machine: <code>{{ device.hostname }}</code></small>{% endif %}
+          {% if device.owner_note %}<br><small><em>{{ device.owner_note }}</em></small>{% endif %}
+        </td>
+        <td>
+          <mark class="badge {{ device.state | badge_class }}">{{ device.state }}</mark>
+          {% if device.state == "UNCLAIMED" %}<br><small>waiting for first run</small>{% endif %}
+        </td>
+        <td>
+          {% if device.rental %}
+          <a href="/rentals/{{ device.rental.id }}">{{ device.rental.label }}</a><br>
+          <small>{{ device.rental.customer.name }} &middot; {{ device.status }}</small>
           {% else %}
-          <span style="color: gray;">&#9675; {{ (seconds_since_seen / 60) | round(1) }}m ago</span>
+          <small>in the pool</small>
           {% endif %}
-          {% if device.tailscale_ip %}<br><small>{{ device.tailscale_ip }}</small>{% endif %}
-        {% else %}
-        <small>never</small>
-        {% endif %}
-      </td>
-      <td>
-        {% if device.enrollment_key %}
-        <code style="font-size: 0.75rem;">{{ device.enrollment_key }}</code>
-        {% else %}
-        <small>&mdash;</small>
-        {% endif %}
-      </td>
-      <td>
-        {% if device.rental_id is none and device.state != "RETIRED" %}
-        <form method="post" action="/fleet/devices/{{ device.id }}/retire" style="margin: 0;"
-              onsubmit="return confirm('Retire {{ device.label }} from the fleet? Its enrollment key stops working.');">
-          <button type="submit" class="secondary outline" style="width: auto; margin: 0; padding: 0.2rem 0.6rem;">Retire</button>
-        </form>
-        {% endif %}
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6"><em>No devices yet. Add one above.</em></td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+        </td>
+        <td>
+          {% if device.last_seen_at %}
+            {% set seconds_since_seen = (now - device.last_seen_at).total_seconds() %}
+            {% if seconds_since_seen < offline_after %}
+            <span class="status-online">&#9679; Online</span>
+            {% else %}
+            <span class="status-offline">&#9675; {{ (seconds_since_seen / 60) | round(1) }}m ago</span>
+            {% endif %}
+            {% if device.tailscale_ip %}<br><small>{{ device.tailscale_ip }}</small>{% endif %}
+          {% else %}
+          <small>never</small>
+          {% endif %}
+        </td>
+        <td>
+          {% if device.enrollment_key %}
+          <code style="font-size: 0.75rem;">{{ device.enrollment_key }}</code>
+          {% else %}
+          <small>-</small>
+          {% endif %}
+        </td>
+        <td>
+          {% if device.rental_id is none and device.state != "RETIRED" %}
+          <form method="post" action="/fleet/devices/{{ device.id }}/retire" style="margin: 0;"
+                onsubmit="return confirm('Retire {{ device.label }} from the fleet? Its enrollment key stops working.');">
+            <button type="submit" class="secondary outline">Retire</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6"><em>No devices yet. Add one above.</em></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
 
-<article>
+<article class="card-green">
   <h3>What to send someone whose laptop this is</h3>
   <p>Send them the <code>LanternAgentApp</code> folder with a <code>config.txt</code> containing
   their own enrollment key from the table above:</p>
   <pre><code>LANTERN_SERVER_URL={{ server_url }}
 LANTERN_ENROLLMENT_KEY=&lt;their key from the table&gt;</code></pre>
   <p>They install Tailscale once from <a href="https://tailscale.com/download">tailscale.com/download</a>
-  (they do <strong>not</strong> need a Tailscale account &mdash; Lantern supplies the key), then double-click
+  (they do <strong>not</strong> need a Tailscale account, Lantern supplies the key), then double-click
   <code>Join Lantern.bat</code>. That is the whole thing they ever do.</p>
   <p><small>The enrollment key is single-purpose: it claims one device row. The first machine to use
   it pins the row to that machine's signing key, so a copied key cannot be used to impersonate the

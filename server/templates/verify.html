@@ -5,8 +5,8 @@
 <h2>{{ "Audit report verification" if is_report else "Certificate verification" }}</h2>
 
 {% if valid and is_report %}
-<article style="border-left: 6px solid green; padding-left: 1rem;">
-  <h3 style="color: green;">&#9989; Valid - this audit report is genuine</h3>
+<article class="alert alert-success">
+  <h3 class="text-ok">&#9989; Valid, this audit report is genuine</h3>
   <p>This report was signed by the Lantern server and has not been altered since it was generated.</p>
   <ul>
     <li>Rental: {{ payload.rental_label }} (ID {{ payload.rental_id }})</li>
@@ -21,8 +21,8 @@
   </ul>
 </article>
 {% elif valid %}
-<article style="border-left: 6px solid green; padding-left: 1rem;">
-  <h3 style="color: green;">&#9989; Valid - key permanently destroyed</h3>
+<article class="alert alert-success">
+  <h3 class="text-ok">&#9989; Valid, key permanently destroyed</h3>
   <p>This certificate was signed by the device itself and has not been altered.</p>
   <ul>
     <li>Device: {{ payload.device_label }}</li>
@@ -53,8 +53,8 @@
   {% endif %}
 </article>
 {% elif payload and checks %}
-<article style="border-left: 6px solid #a15c00; padding-left: 1rem;">
-  <h3 style="color: #a15c00;">&#9888; Signature is genuine, but the story does not add up</h3>
+<article class="alert alert-warning">
+  <h3 class="text-warn">&#9888; Signature is genuine, but the story does not add up</h3>
   <p>This device really did sign this certificate, but at least one cross-check against
   the records written before the erasure failed. Treat it as unproven.</p>
   <table>
@@ -69,13 +69,13 @@
   </table>
 </article>
 {% else %}
-<article style="border-left: 6px solid red; padding-left: 1rem;">
+<article class="alert alert-error">
   {% if kind == "report" %}
-  <h3 style="color: red;">&#10060; Invalid - this report cannot be trusted</h3>
+  <h3 class="text-error">&#10060; Invalid, this report cannot be trusted</h3>
   <p>{{ error }}</p>
   <p><small>Ask for a freshly generated report straight from the dashboard.</small></p>
   {% else %}
-  <h3 style="color: red;">&#10060; Invalid - device requires inspection</h3>
+  <h3 class="text-error">&#10060; Invalid, device requires inspection</h3>
   <p>{{ error }}</p>
   <p><small>Nothing here can be trusted. Treat this device as if its data were still readable and have it inspected.</small></p>
   {% endif %}

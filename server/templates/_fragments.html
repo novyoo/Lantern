@@ -3,23 +3,23 @@
 {% set locked_count = rental.devices | selectattr("status", "equalto", "LOCKED") | list | length %}
 {% set total = rental.devices | length %}
 <div id="rental-status"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <p>Status: <mark>{{ rental.status }}</mark></p>
+  <p>Status: <mark class="badge {{ rental.status | badge_class }}">{{ rental.status }}</mark></p>
 
   {% if rental.status == "ACTIVE" %}
   <p>Time remaining: <strong><span id="countdown" data-end="{{ rental.end_date.isoformat() }}Z">calculating...</span></strong></p>
-  <button hx-post="/rentals/{{ rental.id }}/lock?confirm=yes" hx-swap="none" hx-confirm="Lock this rental now? This affects {{ active_count }} device(s) - every one becomes unreadable until it is unlocked or erased.{% if active_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Lock</button>
+  <button hx-post="/rentals/{{ rental.id }}/lock?confirm=yes" hx-swap="none" hx-confirm="Lock this rental now? This affects {{ active_count }} device(s), every one becomes unreadable until it is unlocked or erased.{% if active_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Lock</button>
   <button hx-post="/rentals/{{ rental.id }}/extend?days=30&confirm=yes" hx-swap="none" hx-confirm="Extend this rental by 30 days? The end date moves and every device's network key is reissued.">Extend 30 days</button>
 
   {% elif rental.status == "LOCKED" %}
   <p>All {{ locked_count }} locked device(s) are unreadable. This is reversible.</p>
   <button hx-post="/rentals/{{ rental.id }}/unlock?confirm=yes" hx-swap="none" hx-confirm="Unlock this rental? This affects {{ locked_count }} device(s).{% if locked_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Unlock</button>
   <button hx-post="/rentals/{{ rental.id }}/extend?days=30&confirm=yes" hx-swap="none" hx-confirm="Extend this rental by 30 days? It unlocks {{ locked_count }} device(s), moves the end date, and reissues every device's network key.{% if locked_count > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Extend 30 days</button>
-  <button hx-post="/rentals/{{ rental.id }}/confirm_erasure?confirm=yes" hx-swap="none" hx-confirm="Confirm erasure of {{ total }} device(s)? Every key is destroyed permanently. This cannot be undone.{% if total > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}">Confirm Erasure</button>
+  <button hx-post="/rentals/{{ rental.id }}/confirm_erasure?confirm=yes" hx-swap="none" hx-confirm="Confirm erasure of {{ total }} device(s)? Every key is destroyed permanently. This cannot be undone.{% if total > 10 %} That is above the safety limit of 10 devices, so you are confirming a large action.{% endif %}" class="btn-danger">Confirm Erasure</button>
 
   {% elif rental.status == "ERASED" %}
   {% set issued = rental.devices | selectattr("certificate_payload") | list | length %}
   <p>Erased. Keys destroyed on every device. This rental is finished.</p>
-  <p>Certificates issued: <strong>{{ issued }}/{{ total }}</strong>{% if issued < total %} &mdash; {{ total - issued }} device(s) offline, pending.{% endif %}</p>
+  <p>Certificates issued: <strong>{{ issued }}/{{ total }}</strong>{% if issued < total %}, {{ total - issued }} device(s) offline, pending.{% endif %}</p>
   {% endif %}
 
   <p><a href="/rentals/{{ rental.id }}/report" role="button" class="secondary">Audit report</a></p>
@@ -36,7 +36,7 @@
       {% for item in checklist %}
       <tr>
         <td>{{ item.step }}</td>
-        <td>{% if item.total and item.done == item.total %}<span style="color: green;">{{ item.done }} / {{ item.total }}</span>{% else %}<span style="color: #a15c00;">{{ item.done }} / {{ item.total }}</span>{% endif %}</td>
+        <td>{% if item.total and item.done == item.total %}<span class="text-ok">{{ item.done }} / {{ item.total }}</span>{% else %}<span class="text-warn">{{ item.done }} / {{ item.total }}</span>{% endif %}</td>
         <td><small>{% if item.simulated %}simulated in this demo{% else %}proven cryptographically{% endif %}</small></td>
       </tr>
       {% endfor %}
@@ -60,20 +60,20 @@
     {{ device.site.name if device.site else "-" }}
     {% endif %}
   </td>
-  <td><mark>{{ device.status }}</mark></td>
+  <td><mark class="badge {{ device.status | badge_class }}">{{ device.status }}</mark></td>
   <td>
     {% if device.last_seen_at %}
       {% set seconds_since_seen = (now - device.last_seen_at).total_seconds() %}
       {% if seconds_since_seen < 15 %}
-        <span style="color: green;">&#9679; Online</span>
+        <span class="status-online">&#9679; Online</span>
       {% else %}
-        <span style="color: gray;">&#9675; Offline ({{ (seconds_since_seen / 60) | round(1) }}m ago)</span>
+        <span class="status-offline">&#9675; Offline ({{ (seconds_since_seen / 60) | round(1) }}m ago)</span>
       {% endif %}
       {% if device.confirmed_status and device.confirmed_status != device.status %}
-      <br><small>agent still applying &mdash; last confirmed {{ device.confirmed_status }}</small>
+      <br><small>agent still applying, last confirmed {{ device.confirmed_status }}</small>
       {% endif %}
       {% if device.tailscale_ip and device.status == "ACTIVE" %}
-      <br><small>Network: {{ device.tailscale_ip }}{% if device.has_workspace_key %} &mdash; shared folder unlocked{% endif %}</small>
+      <br><small>Network: {{ device.tailscale_ip }}{% if device.has_workspace_key %}, shared folder unlocked{% endif %}</small>
       {% elif device.status == "ACTIVE" and device.has_workspace_key %}
       <br><small>Shared folder unlocked</small>
       {% endif %}
@@ -84,23 +84,23 @@
   <td>
     {% if device.status not in ("ERASED", "LEFT") %}
       {% if device.status == "ACTIVE" and rental.status == "ACTIVE" %}
-      <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone.">Revoke</button>
+      <button hx-post="/devices/{{ device.id }}/revoke" hx-swap="none" hx-confirm="Revoke {{ device.label }}? It drops off the network immediately. This cannot be undone." class="secondary outline">Revoke</button>
       {% endif %}
-      <button hx-post="/devices/{{ device.id }}/leave" hx-swap="none" hx-confirm="Leave / uninstall {{ device.label }}? This fully removes Lantern from that machine - keys destroyed, shared folder deleted, network disconnected.">Leave / Uninstall</button>
+      <button hx-post="/devices/{{ device.id }}/leave" hx-swap="none" hx-confirm="Leave / uninstall {{ device.label }}? This fully removes Lantern from that machine, keys destroyed, shared folder deleted, network disconnected." class="secondary outline">Leave / Uninstall</button>
     {% elif device.status == "ERASED" %}
       {% if device.certificate_payload %}
       <a href="/devices/{{ device.id }}/certificate">Certificate &#9989;</a>
       <form method="post" action="/devices/{{ device.id }}/release" style="display:inline; margin:0;"
             onsubmit="return confirm('Return {{ device.label }} to the fleet pool? It becomes available for the next customer.');">
-        <button type="submit" class="secondary outline" style="width:auto; margin:0; padding:0.2rem 0.6rem;">Return to fleet</button>
+        <button type="submit" class="secondary outline">Return to fleet</button>
       </form>
       {% else %}
-      <small>Certificate pending (device offline) &mdash; cannot be re-rented yet</small>
+      <small>Certificate pending (device offline), cannot be re-rented yet</small>
       {% endif %}
     {% elif device.status == "LEFT" %}
     <small>Left the rental</small>
     <form method="post" action="/devices/{{ device.id }}/release" style="display:inline; margin:0;">
-      <button type="submit" class="secondary outline" style="width:auto; margin:0; padding:0.2rem 0.6rem;">Return to fleet</button>
+      <button type="submit" class="secondary outline">Return to fleet</button>
     </form>
     {% endif %}
   </td>

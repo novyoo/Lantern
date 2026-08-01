@@ -3,88 +3,102 @@
 
 {% block content %}
 <div hx-ext="ws" ws-connect="/ws/rentals/{{ rental.id }}">
-  <p><a href="/">&larr; All rentals</a></p>
+  <a href="/" class="back-link">&larr; All rentals</a>
   <h2>{{ rental.label }}</h2>
   <p>{{ rental.customer.name }}</p>
   {% if rental.status == "ACTIVE" and rental.join_code %}
-  <p><small>Join code for new devices: <code>{{ rental.join_code }}</code> &mdash; give this to a device so it joins this rental instead of the shared test rental. It is a secret: anyone holding it can place a device into this rental, so it is shown only to people who can already see this page.</small></p>
+  <p><small>Join code for new devices: <code>{{ rental.join_code }}</code>, give this to a device so it joins this rental instead of the shared test rental. It is a secret: anyone holding it can place a device into this rental, so it is shown only to people who can already see this page.</small></p>
   {% endif %}
 
-  {{ status_panel(rental) }}
+  <article class="card-yellow">
+    <h3>Status</h3>
+    {{ status_panel(rental) }}
+  </article>
 
-  <h3>Sites</h3>
-  <p><small>Each site is its own private network on its own interface, with its own shared folder key. A device in one site cannot see or reach a device in another, even though both are on this one contract.</small></p>
-  <p>
-    {% for site in rental.sites %}
-    <mark>{{ site.name }}</mark> ({{ rental.devices | selectattr("site_id", "equalto", site.id) | list | length }} devices)
-    {% else %}
-    <em>No sites yet.</em>
-    {% endfor %}
-  </p>
-  <form hx-post="/rentals/{{ rental.id }}/sites" hx-swap="none">
-    <fieldset role="group">
-      <input type="text" name="name" placeholder="New site name, e.g. Osaka Branch" required>
-      <button type="submit">Add site</button>
-    </fieldset>
-  </form>
+  <article>
+    <h3>Sites</h3>
+    <p><small>Each site is its own private network on its own interface, with its own shared folder key. A device in one site cannot see or reach a device in another, even though both are on this one contract.</small></p>
+    <p>
+      {% for site in rental.sites %}
+      <mark class="badge badge-dark">{{ site.name }}</mark> ({{ rental.devices | selectattr("site_id", "equalto", site.id) | list | length }} devices)
+      {% else %}
+      <em>No sites yet.</em>
+      {% endfor %}
+    </p>
+    <form hx-post="/rentals/{{ rental.id }}/sites" hx-swap="none">
+      <fieldset role="group">
+        <input type="text" name="name" placeholder="New site name, e.g. Osaka Branch" required>
+        <button type="submit">Add site</button>
+      </fieldset>
+    </form>
+  </article>
 
   <h3>Devices</h3>
   {% if user.role == "YRL Admin" and rental.status == "ACTIVE" %}
-  <details{% if not devices %} open{% endif %}>
-    <summary>Assign devices from the fleet ({{ available | length }} available)</summary>
-    {% if available %}
-    <form method="post" action="/rentals/{{ rental.id }}/assign">
-      <fieldset>
-        {% for device in available %}
-        <label>
-          <input type="checkbox" name="device_id" value="{{ device.id }}">
-          {{ device.label }} <small>({{ device.model }}{% if device.owner_note %} &mdash; {{ device.owner_note }}{% endif %})</small>
-        </label>
-        {% endfor %}
-      </fieldset>
-      {% if rental.sites | length > 1 %}
-      <label>
-        Put them in site
-        <select name="site_id">
-          {% for site in rental.sites %}
-          <option value="{{ site.id }}">{{ site.name }}</option>
+  <article>
+    <details{% if not devices %} open{% endif %}>
+      <summary>Assign devices from the fleet ({{ available | length }} available)</summary>
+      {% if available %}
+      <form method="post" action="/rentals/{{ rental.id }}/assign">
+        <fieldset>
+          {% for device in available %}
+          <label>
+            <input type="checkbox" name="device_id" value="{{ device.id }}">
+            {{ device.label }} <small>({{ device.model }}{% if device.owner_note %}, {{ device.owner_note }}{% endif %})</small>
+          </label>
           {% endfor %}
-        </select>
-      </label>
+        </fieldset>
+        {% if rental.sites | length > 1 %}
+        <label>
+          Put them in site
+          <select name="site_id">
+            {% for site in rental.sites %}
+            <option value="{{ site.id }}">{{ site.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% endif %}
+        <button type="submit" class="btn-accent">Assign to this rental</button>
+      </form>
+      <p><small>The laptops are not touched. Each one finds out on its next check-in,
+      within a few seconds, and joins the network, picks up the workspace key and starts
+      syncing on its own.</small></p>
+      {% else %}
+      <p><small>No devices in the pool. <a href="/fleet">Add one to the fleet</a> first, and have
+      it run the agent once so it enrolls.</small></p>
       {% endif %}
-      <button type="submit">Assign to this rental</button>
-    </form>
-    <p><small>The laptops are not touched. Each one finds out on its next check-in &mdash;
-    within a few seconds &mdash; and joins the network, picks up the workspace key and starts
-    syncing on its own.</small></p>
-    {% else %}
-    <p><small>No devices in the pool. <a href="/fleet">Add one to the fleet</a> first, and have
-    it run the agent once so it enrolls.</small></p>
-    {% endif %}
-  </details>
+    </details>
+  </article>
   {% endif %}
-  <table>
-    <thead>
-      <tr>
-        <th>Device</th>
-        <th>Model</th>
-        <th>Site</th>
-        <th>Status</th>
-        <th>Agent</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for device in devices %}
-      {{ device_row(rental, device, now) }}
-      {% endfor %}
-    </tbody>
-  </table>
 
-  {{ return_checklist_panel(rental, checklist) }}
+  <article class="card-blue">
+    <table>
+      <thead>
+        <tr>
+          <th>Device</th>
+          <th>Model</th>
+          <th>Site</th>
+          <th>Status</th>
+          <th>Agent</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for device in devices %}
+        {{ device_row(rental, device, now) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
 
-  <h3>Activity</h3>
-  {{ audit_log_panel(events) }}
+  <article>
+    {{ return_checklist_panel(rental, checklist) }}
+  </article>
+
+  <article>
+    <h3>Activity</h3>
+    {{ audit_log_panel(events) }}
+  </article>
 </div>
 
 <script>
@@ -94,7 +108,7 @@
     var end = new Date(el.dataset.end).getTime();
     var diff = end - Date.now();
     if (diff <= 0) {
-      el.textContent = "0s - waiting for auto-lock";
+      el.textContent = "0s, waiting for auto-lock";
       return;
     }
     var days = Math.floor(diff / 86400000);
