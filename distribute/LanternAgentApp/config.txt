@@ -1,2 +1,2 @@
-LANTERN_SERVER_URL=https://lantern.example.com
+LANTERN_SERVER_URL=https://172-198-136-137.nip.io
 LANTERN_ENROLLMENT_KEY=<paste the key you were given>
